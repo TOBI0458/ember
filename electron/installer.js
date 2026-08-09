@@ -92,7 +92,7 @@ async function installGame(game, { onStage, signal } = {}) {
   }
 
   const report = (stage, extra = {}) => onStage && onStage({ stage, ...extra });
-  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'claude-launcher-'));
+  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ember-'));
   const archive = path.join(tempRoot, 'package.zip');
   const staging = path.join(tempRoot, 'unpacked');
 

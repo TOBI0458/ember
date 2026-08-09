@@ -1,4 +1,4 @@
-# Claude Launcher
+# Ember
 
 Ein Spiele-Launcher im Steam/Epic-Stil. Du lädst deine Spiele einmal als ZIP zu
 GitHub hoch — alle anderen bekommen sie und jedes spätere Update automatisch über
@@ -149,7 +149,7 @@ zeigt unten eine Leiste zum Neustarten an.
 | `scripts/make-demo.js` | baut den Demo-Katalog |
 
 Einstellungen und Bibliothek liegen unter
-`%APPDATA%\claude-launcher\` und sind normale, lesbare JSON-Dateien.
+`%APPDATA%\Ember\` und sind normale, lesbare JSON-Dateien.
 
 Wenn etwas klemmt, startet
 

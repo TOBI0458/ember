@@ -30,7 +30,7 @@ Merk dir deinen Benutzernamen, den brauchst du gleich überall.
 | Repo | Wofür |
 | --- | --- |
 | `launcher-katalog` | die `games.json` **und** die Spiel-ZIPs als Releases |
-| `claude-launcher` | der Launcher selbst, für seine eigenen Updates |
+| `ember` | der Launcher selbst, für seine eigenen Updates |
 
 Beide müssen **öffentlich** sein, sonst kommen deine Spieler nicht an die
 Dateien.
@@ -86,9 +86,9 @@ Ab jetzt schaut der Launcher dort nach, was es zu spielen gibt.
 npm run dist
 ```
 
-Das legt in `dist/` einen Windows-Installer an (`Claude Launcher Setup 0.1.0.exe`).
+Das legt in `dist/` einen Windows-Installer an (`Ember Setup 0.1.0.exe`).
 
-Diesen Installer lädst du als **Release in dein `claude-launcher`-Repo** hoch —
+Diesen Installer lädst du als **Release in dein `ember`-Repo** hoch —
 zusammen mit der Datei `latest.yml`, die daneben liegt.
 
 > **Die `latest.yml` ist der wichtigste Teil.** An ihr erkennt der Launcher

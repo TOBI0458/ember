@@ -1,7 +1,7 @@
 'use strict';
 
 // Winziger JSON-Store für Einstellungen und Bibliothek.
-// Alles liegt unter %APPDATA%/claude-launcher/ und ist von Hand lesbar.
+// Alles liegt unter %APPDATA%/Ember/ und ist von Hand lesbar.
 
 const fs = require('fs');
 const path = require('path');

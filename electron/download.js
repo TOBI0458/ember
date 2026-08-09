@@ -12,7 +12,7 @@ const crypto = require('crypto');
 const { pathToFileURL, fileURLToPath } = require('url');
 
 const MAX_REDIRECTS = 6;
-const USER_AGENT = 'ClaudeLauncher/0.1 (+https://github.com)';
+const USER_AGENT = 'Ember/0.1 (+https://github.com)';
 
 function request(url, redirectsLeft) {
   return new Promise((resolve, reject) => {

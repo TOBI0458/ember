@@ -1,7 +1,7 @@
 {
-  "name": "claude-launcher",
+  "name": "ember",
   "version": "0.1.0",
-  "description": "Ein Spiele-Launcher im Steam/Epic-Stil mit automatischen Updates ueber GitHub Releases",
+  "description": "Ember - ein Spiele-Launcher im Steam/Epic-Stil mit automatischen Updates ueber GitHub Releases",
   "main": "electron/main.js",
   "author": "Tobias",
   "license": "MIT",
@@ -21,8 +21,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.tobias.claudelauncher",
-    "productName": "Claude Launcher",
+    "appId": "com.tobias.ember",
+    "productName": "Ember",
     "files": [
       "electron/**/*",
       "src/**/*",
@@ -42,7 +42,7 @@
       {
         "provider": "github",
         "owner": "DEIN-GITHUB-NAME",
-        "repo": "claude-launcher",
+        "repo": "ember",
         "gamesRepo": "launcher-katalog"
       }
     ]

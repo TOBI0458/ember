@@ -2,7 +2,7 @@
 
 // Der Katalog ist eine einzige games.json.
 // Live liegt sie in deinem GitHub-Repo, z. B.
-//   https://raw.githubusercontent.com/DEIN-NAME/claude-launcher-catalog/main/games.json
+//   https://raw.githubusercontent.com/DEIN-NAME/launcher-katalog/main/games.json
 // Solange keine URL eingetragen ist, läuft der Launcher gegen demo/games.json.
 
 const fs = require('fs');
