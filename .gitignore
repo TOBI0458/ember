@@ -2,3 +2,7 @@ node_modules/
 dist/
 demo/dist/
 *.log
+
+# Hilfsfenster mit Pfaden, die nur auf diesem Rechner stimmen
+hochladen.bat
+*-protokoll.txt
