@@ -1,0 +1,6 @@
+# Zeilenenden im Repo einheitlich halten, damit Windows und Git sich nicht
+# gegenseitig die Dateien umschreiben.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.zip binary
