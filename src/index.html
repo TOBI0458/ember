@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>Claude Launcher</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Eigene Titelleiste, damit das Fenster wie bei Steam/Epic aussieht -->
+    <header class="titlebar">
+      <div class="titlebar__drag">
+        <div class="brand">
+          <span class="brand__mark"></span>
+          <span class="brand__name">Claude Launcher</span>
+        </div>
+        <nav class="tabs" id="tabs">
+          <button class="tab is-active" data-view="store">Store</button>
+          <button class="tab" data-view="library">Bibliothek</button>
+          <button class="tab" data-view="downloads">
+            Downloads <span class="tab__badge" id="queueBadge" hidden>0</span>
+          </button>
+          <button class="tab" data-view="settings">Einstellungen</button>
+        </nav>
+      </div>
+      <div class="window-controls">
+        <button id="btnMinimize" title="Minimieren" aria-label="Minimieren">
+          <svg viewBox="0 0 12 12"><path d="M2 6h8" /></svg>
+        </button>
+        <button id="btnMaximize" title="Maximieren" aria-label="Maximieren">
+          <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" /></svg>
+        </button>
+        <button id="btnClose" class="is-danger" title="Schließen" aria-label="Schließen">
+          <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <!-- Seitenleiste mit der installierten Bibliothek -->
+      <aside class="sidebar">
+        <div class="sidebar__search">
+          <svg class="icon" viewBox="0 0 16 16">
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5L14 14" />
+          </svg>
+          <input id="search" type="search" placeholder="Suchen" autocomplete="off" />
+        </div>
+
+        <div class="sidebar__section">
+          <div class="sidebar__label">
+            <span>Installiert</span>
+            <span id="installedCount" class="pill">0</span>
+          </div>
+          <ul class="game-list" id="sidebarInstalled"></ul>
+        </div>
+
+        <div class="sidebar__section">
+          <div class="sidebar__label"><span>Alle Spiele</span></div>
+          <ul class="game-list" id="sidebarCatalog"></ul>
+        </div>
+
+        <div class="sidebar__footer">
+          <div class="sidebar__status" id="catalogStatus">Katalog wird geladen…</div>
+          <button class="btn btn--ghost btn--block" id="btnRefresh">Katalog aktualisieren</button>
+        </div>
+      </aside>
+
+      <main class="content" id="content">
+        <div class="loading">Wird geladen…</div>
+      </main>
+    </div>
+
+    <!-- Banner für Launcher-Updates -->
+    <div class="update-bar" id="updateBar" hidden>
+      <span id="updateBarText"></span>
+      <button class="btn btn--primary btn--sm" id="updateBarAction">Neu starten</button>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,72 @@
+{
+  "manifestVersion": 1,
+  "updatedAt": "2026-08-09T15:46:30.721Z",
+  "games": [
+    {
+      "id": "neon-drift",
+      "title": "Neon Drift",
+      "developer": "Tobias",
+      "shortDescription": "Ein schneller Arcade-Lauf durch pulsierendes Neon. Jede Sekunde zählt, jeder Fehler kostet alles.",
+      "description": "Neon Drift ist ein Reaktionsspiel in einer Stadt aus Licht. Du steuerst einen Funken durch ein Feld treibender Orbs — die blauen bringen Punkte, die roten setzen dich zurück auf null.\n\nJe länger du überlebst, desto schneller wird das Feld. Es gibt kein Ende, nur deine Bestzeit.",
+      "tags": [
+        "Arcade",
+        "Reflexe",
+        "Singleplayer"
+      ],
+      "version": "1.2.0",
+      "releaseDate": "2026-06-14",
+      "sizeBytes": 1871,
+      "featured": true,
+      "executable": "start.bat",
+      "patchNotes": "• Orbs bewegen sich jetzt gleichmäßiger\n• Bestzeit bleibt nach einem Treffer erhalten\n• Trefferzone am Spieler leicht verkleinert",
+      "download": {
+        "url": "{{DEMO_DIST}}/neon-drift-1.2.0.zip",
+        "sha256": "c77097a14039b2489416fb43c6d0733fb7aa5f95f8274bc1ba919da10740c334"
+      }
+    },
+    {
+      "id": "pixel-forge",
+      "title": "Pixel Forge",
+      "developer": "Tobias",
+      "shortDescription": "Ein ruhiges Puzzlespiel über Formen, Farben und Geduld.",
+      "description": "Pixel Forge ist noch in der frühen Phase. Du sammelst Bausteine und setzt sie zu größeren Mustern zusammen.\n\nDiese Version zeigt den Kern der Steuerung. Der Aufbaumodus kommt im nächsten Update.",
+      "tags": [
+        "Puzzle",
+        "Aufbau",
+        "Early Access"
+      ],
+      "version": "0.9.4",
+      "releaseDate": "2026-07-02",
+      "sizeBytes": 1839,
+      "featured": false,
+      "executable": "start.bat",
+      "patchNotes": "• Erste spielbare Fassung\n• Steuerung auf die Maus umgestellt",
+      "download": {
+        "url": "{{DEMO_DIST}}/pixel-forge-0.9.4.zip",
+        "sha256": "00fde278bb9f009dde7cce290b0164a3edf360270408dc798a339b285c5b6f6a"
+      }
+    },
+    {
+      "id": "star-relay",
+      "title": "Star Relay",
+      "developer": "Tobias",
+      "shortDescription": "Lenke ein Signal durch ein Feld aus Trabanten, ohne den Kontakt zu verlieren.",
+      "description": "Star Relay dreht sich um eine einzige Frage: wie lange hältst du die Leitung offen?\n\nDu führst einen Signalpunkt durch ein Feld treibender Körper. Berühre die hellen, meide die roten. Version 2 hat das gesamte Bewegungsmodell neu bekommen.",
+      "tags": [
+        "Weltraum",
+        "Geschick",
+        "Singleplayer"
+      ],
+      "version": "2.0.1",
+      "releaseDate": "2026-05-20",
+      "sizeBytes": 1844,
+      "featured": false,
+      "executable": "start.bat",
+      "patchNotes": "• Bewegungsmodell komplett überarbeitet\n• Kollisionen fühlen sich fairer an\n• Fehler behoben, bei dem der Punktestand hängen blieb",
+      "download": {
+        "url": "{{DEMO_DIST}}/star-relay-2.0.1.zip",
+        "sha256": "e7ebb7ac3d8312fba139a28b8c26ec4c8d2d647e5d1de11a56326f41d0c9e8d9"
+      }
+    }
+  ]
+}
