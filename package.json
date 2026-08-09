@@ -41,7 +41,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "DEIN-GITHUB-NAME",
+        "owner": "TOBI0458",
         "repo": "ember",
         "gamesRepo": "launcher-katalog"
       }
