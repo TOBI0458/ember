@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('launcher', {
     info: () => invoke('app:info'),
     openDataDir: () => invoke('app:openDataDir'),
     checkForUpdates: () => invoke('app:checkForUpdates'),
+    uninstallerInfo: () => invoke('app:uninstallerInfo'),
+    showUninstaller: () => invoke('app:showUninstaller'),
+    uninstall: () => invoke('app:uninstall'),
     installLauncherUpdate: () => ipcRenderer.send('launcher:installUpdate'),
     onLauncherUpdate: on('launcher:update'),
     openExternal: (url) => invoke('shell:openExternal', url)

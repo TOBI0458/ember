@@ -149,6 +149,30 @@ zeigt unten eine Leiste zum Neustarten an. Ausführlich in
 
 ---
 
+## Sprache
+
+Der Launcher spricht Deutsch und Englisch. Ohne Einstellung richtet er sich nach
+der Sprache von Windows; unter **Einstellungen → Sprache** lässt sich eine feste
+Sprache wählen. Der Wechsel gilt sofort, ohne Neustart.
+
+Eine weitere Sprache sind zwei Schritte in [`src/i18n.js`](src/i18n.js): eine
+Zeile in `LANGUAGES` und ein Block mit denselben Schlüsseln in `STRINGS`. Fehlt
+ein Schlüssel, nimmt der Launcher den englischen Text — eine halb übersetzte
+Sprache macht die Oberfläche also nicht kaputt.
+
+## Ember wieder loswerden
+
+Drei Wege, alle führen zum selben Programm:
+
+- **Einstellungen → Ember entfernen → Ember deinstallieren**
+- `Uninstall Ember.exe` im Installationsordner
+- Windows-Einstellungen → Apps
+
+Installierte Spiele und die Bibliothek unter `%APPDATA%\Ember\` bleiben dabei
+liegen. Wer auch die loswerden will, löscht den Ordner von Hand.
+
+---
+
 ## Aufbau des Projekts
 
 | Pfad | Aufgabe |
@@ -161,10 +185,13 @@ zeigt unten eine Leiste zum Neustarten an. Ausführlich in
 | `electron/queue.js` | Warteschlange, ein Download nach dem anderen |
 | `electron/store.js` | Einstellungen und Bibliothek als JSON |
 | `src/` | die Oberfläche (HTML, CSS, ein JS) |
+| `src/i18n.js` | alle sichtbaren Texte, je Sprache einmal |
+| `nsis/installer.nsh` | Willkommens- und Schlussseite des Installers |
 | `scripts/make-demo.js` | baut den Demo-Katalog |
 | `scripts/publish-game.js` | packt ein Spiel und trägt es in den Katalog ein |
 | `scripts/release-launcher.js` | baut den Installer und veröffentlicht ihn |
 | `scripts/make-icon.js` | zeichnet `build/icon.png` für den Installer |
+| `scripts/make-installer-art.js` | zeichnet die beiden Bilder im Installer |
 
 Einstellungen und Bibliothek liegen unter
 `%APPDATA%\Ember\` und sind normale, lesbare JSON-Dateien.

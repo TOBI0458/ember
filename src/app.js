@@ -3,9 +3,14 @@
 /* =========================================================================
    Oberfläche des Launchers. Reines DOM, kein Framework - der Zustand liegt
    in `state`, jede Änderung ruft render() auf.
+
+   Sichtbare Texte stehen nicht hier, sondern in i18n.js und kommen über
+   t("schluessel"). Wer eine Sprache umstellt, löst nur ein render() aus -
+   deshalb wechselt die Oberfläche ohne Neustart.
    ========================================================================= */
 
 const api = window.launcher;
+const { t, locale, languageInfo, resolveLanguage, setLanguage, LANGUAGES } = window.i18n;
 
 const state = {
   view: 'store',
@@ -16,7 +21,10 @@ const state = {
   queue: [],
   settings: {},
   appInfo: {},
-  status: 'Katalog wird geladen…',
+  uninstaller: { available: false, path: null },
+  // Als Schlüssel gemerkt statt als fertiger Satz, sonst bliebe die Zeile
+  // nach einem Sprachwechsel in der alten Sprache stehen.
+  status: { key: 'catalog.loading' },
   launcherUpdate: null
 };
 
@@ -47,6 +55,13 @@ function escapeHtml(value) {
   })[c]);
 }
 
+function number(value, digits) {
+  return value.toLocaleString(locale(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
 function formatBytes(bytes) {
   if (!bytes) return '—';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -56,20 +71,24 @@ function formatBytes(bytes) {
     value /= 1024;
     i += 1;
   }
-  return `${value.toFixed(value < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+  return `${number(value, value < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
 function formatDate(value) {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function formatPlaytime(seconds) {
-  if (!seconds) return 'Noch nicht gespielt';
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} Min. gespielt`;
-  return `${(seconds / 3600).toFixed(1)} Std. gespielt`;
+  if (!seconds) return t('playtime.never');
+  if (seconds < 3600) return t('playtime.minutes', { n: Math.max(1, Math.round(seconds / 60)) });
+  return t('playtime.hours', { n: number(seconds / 3600, 1) });
+}
+
+function statusText() {
+  return t(state.status.key, state.status.vars);
 }
 
 /** Aus der Spiel-ID abgeleiteter Farbverlauf - Ersatz für fehlende Cover. */
@@ -125,14 +144,17 @@ function toast(message, kind = 'info') {
   node.className = `toast toast--${kind}`;
   node.textContent = message;
   el.toasts.appendChild(node);
-  setTimeout(() => node.remove(), kind === 'error' ? 7000 : 4000);
+  setTimeout(() => {
+    node.classList.add('is-leaving');
+    setTimeout(() => node.remove(), 200);
+  }, kind === 'error' ? 7000 : 4000);
 }
 
 /** Jeder IPC-Aufruf liefert { ok, data|error }; Fehler landen als Toast. */
 async function call(promise, { silent } = {}) {
   const result = await promise;
   if (!result?.ok) {
-    if (!silent) toast(result?.error || 'Unbekannter Fehler', 'error');
+    if (!silent) toast(result?.error || t('common.unknownError'), 'error');
     return null;
   }
   return result.data;
@@ -149,32 +171,93 @@ function filtered() {
     (g) =>
       g.title.toLowerCase().includes(term) ||
       g.developer.toLowerCase().includes(term) ||
-      g.tags.some((t) => t.toLowerCase().includes(term))
+      g.tags.some((tag) => tag.toLowerCase().includes(term))
   );
 }
+
+/* ------------------------------------------------------------------ Sprache */
+
+/** Setzt die Sprache und schreibt alle festen Texte im HTML neu. */
+function applyLanguage() {
+  const code = resolveLanguage(state.settings.language, state.appInfo.systemLocale);
+  setLanguage(code);
+  document.documentElement.lang = code;
+
+  document.querySelectorAll('[data-i18n]').forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((node) => {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((node) => {
+    const text = t(node.dataset.i18nTitle);
+    node.title = text;
+    node.setAttribute('aria-label', text);
+  });
+}
+
+/* ------------------------------------------------------------- Rückfrage */
+
+const modal = {
+  root: document.getElementById('modal'),
+  title: document.getElementById('modalTitle'),
+  text: document.getElementById('modalText'),
+  ok: document.getElementById('modalOk'),
+  cancel: document.getElementById('modalCancel'),
+  backdrop: document.getElementById('modalBackdrop'),
+  resolve: null
+};
+
+/** Zeigt die Rückfrage und wartet auf die Antwort: true = fortfahren. */
+function confirmAction({ title, text, okLabel }) {
+  modal.title.textContent = title;
+  modal.text.textContent = text;
+  modal.ok.textContent = okLabel;
+  modal.cancel.textContent = t('common.cancel');
+  modal.root.hidden = false;
+  modal.ok.focus();
+  return new Promise((resolve) => {
+    modal.resolve = resolve;
+  });
+}
+
+function closeModal(answer) {
+  if (!modal.resolve) return;
+  const resolve = modal.resolve;
+  modal.resolve = null;
+  modal.root.hidden = true;
+  resolve(answer);
+}
+
+modal.ok.addEventListener('click', () => closeModal(true));
+modal.cancel.addEventListener('click', () => closeModal(false));
+modal.backdrop.addEventListener('click', () => closeModal(false));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeModal(false);
+});
 
 /* ------------------------------------------------------------- Datenfluss */
 
 async function loadCatalog({ notify } = {}) {
-  el.catalogStatus.textContent = 'Katalog wird geladen…';
   const data = await call(api.catalog.fetch(), { silent: true });
   if (!data) {
-    state.status = 'Katalog nicht erreichbar.';
-    el.catalogStatus.textContent = state.status;
-    if (notify) toast('Katalog konnte nicht geladen werden.', 'error');
+    state.status = { key: 'catalog.unreachable' };
+    if (notify) toast(t('catalog.failed'), 'error');
     render();
     return;
   }
   state.catalog = data;
   const count = data.games.length;
-  const labels = {
-    demo: 'Demo-Katalog (Beispielspiele)',
-    remote: count ? `${count} Spiele · aktuell` : 'Noch keine Spiele veröffentlicht',
-    cache: 'Offline — letzter bekannter Stand'
-  };
-  state.status = labels[data.source] || `${count} Spiele`;
-  el.catalogStatus.textContent = state.status;
-  if (notify) toast('Katalog aktualisiert.', 'success');
+  if (data.source === 'demo') {
+    state.status = { key: 'catalog.demo' };
+  } else if (data.source === 'cache') {
+    state.status = { key: 'catalog.offline' };
+  } else if (!count) {
+    state.status = { key: 'catalog.empty' };
+  } else {
+    state.status = { key: 'catalog.count', vars: { n: count } };
+  }
+  if (notify) toast(t('catalog.refreshed'), 'success');
   render();
 }
 
@@ -192,19 +275,43 @@ async function loadQueue() {
 
 async function install(game) {
   await call(api.games.install(game));
-  toast(`"${game.title}" wurde zur Warteschlange hinzugefügt.`, 'success');
+  toast(t('toast.queued', { title: game.title }), 'success');
 }
 
 async function launch(gameId) {
   const result = await call(api.games.launch(gameId));
-  if (result) toast('Spiel wird gestartet…', 'success');
+  if (result) toast(t('toast.launching'), 'success');
 }
 
 async function uninstall(gameId) {
   const entry = state.library[gameId];
   if (!entry) return;
+  const sure = await confirmAction({
+    title: t('confirm.uninstallGameTitle', { title: entry.title }),
+    text: t('confirm.uninstallGameText'),
+    okLabel: t('confirm.uninstallGameOk')
+  });
+  if (!sure) return;
   const done = await call(api.games.uninstall(gameId));
-  if (done) toast(`"${entry.title}" wurde deinstalliert.`);
+  if (done) toast(t('toast.uninstalled', { title: entry.title }));
+}
+
+async function uninstallLauncher() {
+  const sure = await confirmAction({
+    title: t('confirm.uninstallLauncherTitle'),
+    text: t('confirm.uninstallLauncherText'),
+    okLabel: t('confirm.uninstallLauncherOk')
+  });
+  if (!sure) return;
+  const result = await api.app.uninstall();
+  if (!result?.ok) {
+    toast(
+      result?.error === 'UNINSTALLER_NOT_FOUND'
+        ? t('settings.uninstallerMissing')
+        : result?.error || t('common.unknownError'),
+      'error'
+    );
+  }
 }
 
 /* --------------------------------------------------------------- Ansichten */
@@ -215,6 +322,7 @@ function renderSidebar() {
   );
 
   el.installedCount.textContent = installedGames.length;
+  el.catalogStatus.textContent = statusText();
 
   el.sidebarInstalled.innerHTML = installedGames.length
     ? installedGames
@@ -232,7 +340,7 @@ function renderSidebar() {
             </li>`;
         })
         .join('')
-    : '<li class="sidebar__status" style="padding:4px 10px">Noch nichts installiert.</li>';
+    : `<li class="sidebar__status" style="padding:4px 10px">${t('sidebar.nothingInstalled')}</li>`;
 
   el.sidebarCatalog.innerHTML = filtered()
     .map(
@@ -256,9 +364,9 @@ function cardHtml(game) {
   const status = statusOf(game);
   const flag =
     status === 'update'
-      ? '<span class="card__flag card__flag--update">Update</span>'
+      ? `<span class="card__flag card__flag--update">${t('flag.update')}</span>`
       : status === 'installed'
-        ? '<span class="card__flag card__flag--installed">Installiert</span>'
+        ? `<span class="card__flag card__flag--installed">${t('flag.installed')}</span>`
         : '';
   return `
     <article class="card" data-open="${escapeHtml(game.id)}">
@@ -276,25 +384,33 @@ function cardHtml(game) {
     </article>`;
 }
 
+/** Flamme für leere Seiten - dieselbe Form wie in der Titelleiste. */
+const EMPTY_FLAME = `
+  <svg class="empty__flame" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 2.2c3.4 3.2 5.7 6.2 5.7 9.9a5.7 5.7 0 0 1-11.4 0c0-2.1.9-3.8 2.3-5.3.3 1 .9 1.8 1.7 2.2.6-2.5.3-4.6 1.7-6.8z" />
+  </svg>`;
+
+function emptyState(title, text) {
+  return `
+    <div class="empty">
+      <div>
+        ${EMPTY_FLAME}
+        <div class="empty__title">${title}</div>
+        <div>${text}</div>
+      </div>
+    </div>`;
+}
+
 function renderStore() {
   const games = filtered();
   if (!games.length) {
     // Ein leerer Store ist der Normalfall am Anfang, kein Fehler. Deshalb hier
     // kein Hinweis auf Einstellungen - da muss niemand etwas reparieren.
-    const message = state.search
-      ? 'Andere Suche versuchen.'
-      : state.catalog.source === 'cache'
-        ? 'Gerade keine Verbindung. Der Store füllt sich, sobald du wieder online bist.'
-        : 'Noch nichts veröffentlicht. Neue Spiele erscheinen hier von allein.';
-    return `
-      <div class="page">
-        <div class="empty">
-          <div>
-            <div class="empty__title">${state.search ? 'Keine Spiele gefunden' : 'Der Store ist noch leer'}</div>
-            <div>${message}</div>
-          </div>
-        </div>
-      </div>`;
+    if (state.search) {
+      return `<div class="page">${emptyState(t('store.noResultsTitle'), t('store.noResultsText'))}</div>`;
+    }
+    const text = state.catalog.source === 'cache' ? t('store.emptyOffline') : t('store.emptyText');
+    return `<div class="page">${emptyState(t('store.emptyTitle'), text)}</div>`;
   }
 
   const featured = games.find((g) => g.featured) || games[0];
@@ -305,23 +421,25 @@ function renderStore() {
     <div class="page">
       <section class="hero" style="${artStyle(featured, 'hero')}" data-open="${escapeHtml(featured.id)}">
         <div class="hero__body">
-          <div class="hero__eyebrow">${featured.featured ? 'Im Rampenlicht' : 'Neu im Store'}</div>
+          <div class="hero__eyebrow">${featured.featured ? t('store.hero.featured') : t('store.hero.new')}</div>
           <h1 class="hero__title">${escapeHtml(featured.title)}</h1>
           <p class="hero__text">${escapeHtml(featured.shortDescription || featured.description).slice(0, 190)}</p>
           <div class="hero__actions">
-            <button class="btn btn--primary btn--lg" data-open="${escapeHtml(featured.id)}">Ansehen</button>
+            <button class="btn btn--primary btn--lg" data-open="${escapeHtml(featured.id)}">${t(
+              'store.hero.view'
+            )}</button>
           </div>
         </div>
       </section>
 
       ${
         updates.length
-          ? `<h2 class="section-title">Updates verfügbar (${updates.length})</h2>
+          ? `<h2 class="section-title">${t('store.updates', { n: updates.length })}</h2>
              <div class="grid">${updates.map(cardHtml).join('')}</div>`
           : ''
       }
 
-      <h2 class="section-title">Alle Spiele</h2>
+      <h2 class="section-title">${t('store.all')}</h2>
       <div class="grid">${rest.map(cardHtml).join('')}</div>
     </div>`;
 }
@@ -332,14 +450,9 @@ function renderLibrary() {
     return `
       <div class="page">
         <div class="page__head">
-          <div><h1 class="page__title">Bibliothek</h1></div>
+          <div><h1 class="page__title">${t('library.title')}</h1></div>
         </div>
-        <div class="empty">
-          <div>
-            <div class="empty__title">Deine Bibliothek ist leer</div>
-            <div>Installiere ein Spiel im Store, dann taucht es hier auf.</div>
-          </div>
-        </div>
+        ${emptyState(t('library.emptyTitle'), t('library.emptyText'))}
       </div>`;
   }
 
@@ -351,7 +464,7 @@ function renderLibrary() {
       return `
         <article class="card" data-open="${escapeHtml(entry.id)}">
           <div class="card__art" style="${artStyle(game)}">
-            ${hasUpdate ? '<span class="card__flag card__flag--update">Update</span>' : ''}
+            ${hasUpdate ? `<span class="card__flag card__flag--update">${t('flag.update')}</span>` : ''}
             ${game.cover ? '' : `<span class="card__initials">${escapeHtml(initials(entry.title))}</span>`}
           </div>
           <div class="card__body">
@@ -369,10 +482,13 @@ function renderLibrary() {
     <div class="page">
       <div class="page__head">
         <div>
-          <h1 class="page__title">Bibliothek</h1>
-          <p class="page__subtitle">${entries.length} Spiel${entries.length === 1 ? '' : 'e'} installiert · ${formatBytes(
-            entries.reduce((sum, e) => sum + (e.sizeBytes || 0), 0)
-          )} belegt</p>
+          <h1 class="page__title">${t('library.title')}</h1>
+          <p class="page__subtitle">${escapeHtml(
+            t('library.subtitle', {
+              n: entries.length,
+              size: formatBytes(entries.reduce((sum, e) => sum + (e.sizeBytes || 0), 0))
+            })
+          )}</p>
         </div>
       </div>
       <div class="grid">${cards}</div>
@@ -384,7 +500,7 @@ function renderDetail() {
   const entry = state.library[state.selectedId];
 
   if (!game && !entry) {
-    return `<div class="page"><div class="empty"><div class="empty__title">Spiel nicht gefunden</div></div></div>`;
+    return `<div class="page">${emptyState(t('detail.notFound'), '')}</div>`;
   }
 
   // Ist ein installiertes Spiel aus dem Katalog verschwunden, zeigen wir die
@@ -392,8 +508,8 @@ function renderDetail() {
   const view = game || {
     id: entry.id,
     title: entry.title,
-    developer: 'Lokal installiert',
-    description: 'Dieses Spiel ist nicht mehr im Katalog enthalten.',
+    developer: t('detail.localOnly'),
+    description: t('detail.goneFromCatalog'),
     tags: [],
     cover: null,
     hero: null,
@@ -410,21 +526,29 @@ function renderDetail() {
   let action = '';
   if (queued) {
     action = `<button class="btn btn--lg" disabled>${
-      queued.state === 'error' ? 'Fehlgeschlagen' : `${queued.percent || 0} % …`
+      queued.state === 'error' ? t('detail.failed') : t('detail.progress', { n: queued.percent || 0 })
     }</button>
-      <button class="btn btn--ghost" data-cancel="${escapeHtml(view.id)}">Abbrechen</button>`;
+      <button class="btn btn--ghost" data-cancel="${escapeHtml(view.id)}">${t('common.cancel')}</button>`;
   } else if (status === 'update') {
-    action = `<button class="btn btn--update btn--lg" data-install="${escapeHtml(view.id)}">Aktualisieren</button>
-      <button class="btn btn--play" data-launch="${escapeHtml(view.id)}">Trotzdem spielen</button>`;
+    action = `<button class="btn btn--update btn--lg" data-install="${escapeHtml(view.id)}">${t(
+      'detail.update'
+    )}</button>
+      <button class="btn btn--play" data-launch="${escapeHtml(view.id)}">${t('detail.playAnyway')}</button>`;
   } else if (status === 'installed') {
-    action = `<button class="btn btn--play btn--lg" data-launch="${escapeHtml(view.id)}">Spielen</button>`;
+    action = `<button class="btn btn--play btn--lg" data-launch="${escapeHtml(view.id)}">${t(
+      'detail.play'
+    )}</button>`;
   } else {
-    action = `<button class="btn btn--primary btn--lg" data-install="${escapeHtml(view.id)}">Installieren</button>`;
+    action = `<button class="btn btn--primary btn--lg" data-install="${escapeHtml(view.id)}">${t(
+      'detail.install'
+    )}</button>`;
   }
 
   const secondary = entry
-    ? `<button class="btn btn--ghost" data-folder="${escapeHtml(view.id)}">Ordner öffnen</button>
-       <button class="btn btn--ghost btn--danger" data-uninstall="${escapeHtml(view.id)}">Deinstallieren</button>`
+    ? `<button class="btn btn--ghost" data-folder="${escapeHtml(view.id)}">${t('detail.openFolder')}</button>
+       <button class="btn btn--ghost btn--danger" data-uninstall="${escapeHtml(view.id)}">${t(
+         'detail.uninstall'
+       )}</button>`
     : '';
 
   const paragraphs = String(view.description)
@@ -434,7 +558,7 @@ function renderDetail() {
 
   return `
     <section class="detail__hero" style="${artStyle(view, 'hero')}">
-      <button class="detail__back" data-back>← Zurück</button>
+      <button class="detail__back" data-back>← ${t('common.back')}</button>
       <div class="detail__headline">
         <div class="detail__cover" style="${artStyle(view)}">${
           view.cover ? '' : escapeHtml(initials(view.title))
@@ -443,7 +567,7 @@ function renderDetail() {
           <h1 class="detail__title">${escapeHtml(view.title)}</h1>
           <div class="detail__dev">${escapeHtml(view.developer)}</div>
           <div class="tag-row">
-            ${view.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
+            ${view.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
           </div>
         </div>
       </div>
@@ -460,7 +584,7 @@ function renderDetail() {
         <div class="prose">${paragraphs}</div>
         ${
           view.screenshots.length
-            ? `<h2 class="section-title">Eindrücke</h2>
+            ? `<h2 class="section-title">${t('detail.screenshots')}</h2>
                <div class="shots">${view.screenshots
                  .map((s) => `<div class="shot" style="background-image:url('${escapeHtml(s)}')"></div>`)
                  .join('')}</div>`
@@ -469,7 +593,7 @@ function renderDetail() {
         ${
           view.patchNotes
             ? `<div class="notes">
-                 <div class="notes__title">Was ist neu in v${escapeHtml(view.version)}</div>
+                 <div class="notes__title">${t('detail.whatsNew', { version: escapeHtml(view.version) })}</div>
                  <div class="prose">${escapeHtml(view.patchNotes).replace(/\n/g, '<br>')}</div>
                </div>`
             : ''
@@ -477,31 +601,33 @@ function renderDetail() {
       </div>
 
       <aside class="facts">
-        <div class="fact"><span class="fact__key">Neueste Version</span><span class="fact__value">v${escapeHtml(
+        <div class="fact"><span class="fact__key">${t('detail.latestVersion')}</span><span class="fact__value">v${escapeHtml(
           view.version
         )}</span></div>
         ${
           entry
-            ? `<div class="fact"><span class="fact__key">Installiert</span><span class="fact__value">v${escapeHtml(
-                entry.version
-              )}</span></div>
-               <div class="fact"><span class="fact__key">Größe auf Platte</span><span class="fact__value">${formatBytes(
-                 entry.sizeBytes
+            ? `<div class="fact"><span class="fact__key">${t(
+                'detail.installedVersion'
+              )}</span><span class="fact__value">v${escapeHtml(entry.version)}</span></div>
+               <div class="fact"><span class="fact__key">${t(
+                 'detail.sizeOnDisk'
+               )}</span><span class="fact__value">${formatBytes(entry.sizeBytes)}</span></div>
+               <div class="fact"><span class="fact__key">${t(
+                 'detail.executable'
+               )}</span><span class="fact__value">${escapeHtml(
+                 entry.executable || t('detail.executableUnset')
                )}</span></div>
-               <div class="fact"><span class="fact__key">Startdatei</span><span class="fact__value">${escapeHtml(
-                 entry.executable || 'nicht gesetzt'
-               )}</span></div>
-               <div class="fact"><span class="fact__key">Spielzeit</span><span class="fact__value">${escapeHtml(
-                 formatPlaytime(entry.playtimeSeconds)
-               )}</span></div>
-               <div class="fact"><span class="fact__key">Zuletzt gespielt</span><span class="fact__value">${formatDate(
-                 entry.lastPlayed
-               )}</span></div>`
-            : `<div class="fact"><span class="fact__key">Downloadgröße</span><span class="fact__value">${formatBytes(
-                view.sizeBytes
-              )}</span></div>`
+               <div class="fact"><span class="fact__key">${t(
+                 'detail.playtime'
+               )}</span><span class="fact__value">${escapeHtml(formatPlaytime(entry.playtimeSeconds))}</span></div>
+               <div class="fact"><span class="fact__key">${t(
+                 'detail.lastPlayed'
+               )}</span><span class="fact__value">${formatDate(entry.lastPlayed)}</span></div>`
+            : `<div class="fact"><span class="fact__key">${t(
+                'detail.downloadSize'
+              )}</span><span class="fact__value">${formatBytes(view.sizeBytes)}</span></div>`
         }
-        <div class="fact"><span class="fact__key">Veröffentlicht</span><span class="fact__value">${formatDate(
+        <div class="fact"><span class="fact__key">${t('detail.released')}</span><span class="fact__value">${formatDate(
           view.releaseDate
         )}</span></div>
       </aside>
@@ -512,24 +638,10 @@ function renderDownloads() {
   if (!state.queue.length) {
     return `
       <div class="page">
-        <div class="page__head"><div><h1 class="page__title">Downloads</h1></div></div>
-        <div class="empty">
-          <div>
-            <div class="empty__title">Nichts in der Warteschlange</div>
-            <div>Installationen und Updates erscheinen hier mit Fortschritt.</div>
-          </div>
-        </div>
+        <div class="page__head"><div><h1 class="page__title">${t('downloads.title')}</h1></div></div>
+        ${emptyState(t('downloads.emptyTitle'), t('downloads.emptyText'))}
       </div>`;
   }
-
-  const stages = {
-    queued: 'Wartet',
-    downloading: 'Lädt herunter',
-    extracting: 'Entpackt',
-    installing: 'Installiert',
-    done: 'Fertig',
-    error: 'Fehlgeschlagen'
-  };
 
   const rows = state.queue
     .map((item) => {
@@ -539,7 +651,7 @@ function renderDownloads() {
       const sub = isError
         ? escapeHtml(item.error)
         : [
-            stages[item.stage] || 'Vorbereitung',
+            item.stage ? t(`stage.${item.stage}`) : t('stage.preparing'),
             item.total ? `${formatBytes(item.received || 0)} / ${formatBytes(item.total)}` : '',
             item.speedBytesPerSecond ? `${formatBytes(item.speedBytesPerSecond)}/s` : ''
           ]
@@ -565,8 +677,12 @@ function renderDownloads() {
           </div>
           ${
             isError
-              ? `<button class="btn btn--ghost btn--sm" data-dismiss="${escapeHtml(item.gameId)}">Entfernen</button>`
-              : `<button class="btn btn--ghost btn--sm" data-cancel="${escapeHtml(item.gameId)}">Abbrechen</button>`
+              ? `<button class="btn btn--ghost btn--sm" data-dismiss="${escapeHtml(item.gameId)}">${t(
+                  'common.remove'
+                )}</button>`
+              : `<button class="btn btn--ghost btn--sm" data-cancel="${escapeHtml(item.gameId)}">${t(
+                  'common.cancel'
+                )}</button>`
           }
         </div>`;
     })
@@ -576,8 +692,8 @@ function renderDownloads() {
     <div class="page">
       <div class="page__head">
         <div>
-          <h1 class="page__title">Downloads</h1>
-          <p class="page__subtitle">Ein Download nach dem anderen — das hält die Leitung frei.</p>
+          <h1 class="page__title">${t('downloads.title')}</h1>
+          <p class="page__subtitle">${t('downloads.subtitle')}</p>
         </div>
       </div>
       ${rows}
@@ -586,59 +702,88 @@ function renderDownloads() {
 
 function renderSettings() {
   const s = state.settings;
+  const autoCode = resolveLanguage('', state.appInfo.systemLocale);
+  const options = [
+    `<option value="" ${s.language ? '' : 'selected'}>${escapeHtml(
+      t('settings.languageAuto', { language: languageInfo(autoCode).label })
+    )}</option>`,
+    ...LANGUAGES.map(
+      (lang) =>
+        `<option value="${lang.code}" ${s.language === lang.code ? 'selected' : ''}>${escapeHtml(
+          lang.label
+        )}</option>`
+    )
+  ].join('');
+
+  const uninstallBlock = state.uninstaller.available
+    ? `<div class="input-group">
+         <button class="btn btn--danger-solid" id="btnUninstall">${t('settings.uninstallButton')}</button>
+         <button class="btn btn--ghost" id="btnShowUninstaller">${t('settings.showUninstaller')}</button>
+       </div>
+       <div class="hint">${escapeHtml(t('settings.uninstallerPath', { path: state.uninstaller.path }))}</div>`
+    : `<div class="hint">${t('settings.uninstallerMissing')}</div>`;
+
   return `
     <div class="page">
       <div class="page__head">
         <div>
-          <h1 class="page__title">Einstellungen</h1>
-          <p class="page__subtitle">Launcher v${escapeHtml(state.appInfo.version || '?')} · ${escapeHtml(
-            state.appInfo.platform || ''
-          )}</p>
+          <h1 class="page__title">${t('settings.title')}</h1>
+          <p class="page__subtitle">${t('settings.subtitle', {
+            version: escapeHtml(state.appInfo.version || '?'),
+            platform: escapeHtml(state.appInfo.platform || '')
+          })}</p>
         </div>
       </div>
 
-      <div class="callout">
-        <strong>Alles aktualisiert sich von selbst.</strong> Neue Spiele erscheinen im Store,
-        sobald sie veröffentlicht sind, und der Launcher zieht sich seine eigenen Updates im
-        Hintergrund. Du musst hier nichts einstellen und nie wieder etwas herunterladen.
+      <div class="callout">${t('settings.callout')}</div>
+
+      <div class="form-row">
+        <label for="langSelect">${t('settings.language')}</label>
+        <select class="input select" id="langSelect">${options}</select>
+        <div class="hint">${t('settings.languageHint')}</div>
       </div>
 
       <div class="form-row">
-        <label for="manifestUrl">Katalog-URL (games.json)</label>
+        <label for="manifestUrl">${t('settings.catalogUrl')}</label>
         <div class="input-group">
           <input class="input" id="manifestUrl" type="text" spellcheck="false"
                  placeholder="https://raw.githubusercontent.com/DEIN-NAME/REPO/main/games.json"
                  value="${escapeHtml(s.manifestUrl || '')}" />
-          <button class="btn" id="btnSaveManifest">Speichern</button>
+          <button class="btn" id="btnSaveManifest">${t('settings.save')}</button>
         </div>
-        <div class="hint">Steht schon richtig drin. Feld leeren und speichern setzt sie
-          zurück. Aktueller Stand: ${escapeHtml(state.status)}</div>
+        <div class="hint">${escapeHtml(t('settings.catalogHint', { status: statusText() }))}</div>
       </div>
 
       <div class="form-row">
-        <label>Installationsordner</label>
+        <label>${t('settings.installDir')}</label>
         <div class="input-group">
           <input class="input" id="installDir" type="text" readonly value="${escapeHtml(s.installDir || '')}" />
-          <button class="btn" id="btnPickDir">Ändern</button>
+          <button class="btn" id="btnPickDir">${t('settings.change')}</button>
         </div>
-        <div class="hint">Bereits installierte Spiele bleiben, wo sie sind.</div>
+        <div class="hint">${t('settings.installDirHint')}</div>
       </div>
 
       <div class="form-row">
         <label class="switch">
           <input type="checkbox" id="autoUpdateGames" ${s.autoUpdateGames ? 'checked' : ''} />
-          <span>Spiel-Updates beim Start automatisch herunterladen</span>
+          <span>${t('settings.autoUpdate')}</span>
         </label>
-        <div class="hint">Aus heißt: Updates werden nur angezeigt, gestartet werden sie von dir.</div>
+        <div class="hint">${t('settings.autoUpdateHint')}</div>
       </div>
 
-      <h2 class="section-title">Launcher</h2>
+      <h2 class="section-title">${t('settings.launcher')}</h2>
       <div class="form-row">
         <div class="input-group">
-          <button class="btn" id="btnCheckLauncher">Nach Launcher-Update suchen</button>
-          <button class="btn btn--ghost" id="btnOpenData">Datenordner öffnen</button>
+          <button class="btn" id="btnCheckLauncher">${t('settings.checkUpdate')}</button>
+          <button class="btn btn--ghost" id="btnOpenData">${t('settings.openData')}</button>
         </div>
-        <div class="hint">Datenordner: ${escapeHtml(state.appInfo.dataDir || '')}</div>
+        <div class="hint">${escapeHtml(t('settings.dataDirHint', { dir: state.appInfo.dataDir || '' }))}</div>
+      </div>
+
+      <h2 class="section-title section-title--danger">${t('settings.dangerTitle')}</h2>
+      <div class="danger">
+        <p class="danger__text">${t('settings.uninstallText')}</p>
+        ${uninstallBlock}
       </div>
     </div>`;
 }
@@ -672,10 +817,16 @@ function navigate(view, gameId = null) {
 /* ---------------------------------------------------------- Ereignisse */
 
 function wireSettings() {
+  document.getElementById('langSelect').addEventListener('change', async (event) => {
+    state.settings = (await call(api.settings.set({ language: event.target.value }))) || state.settings;
+    applyLanguage();
+    render();
+  });
+
   document.getElementById('btnSaveManifest').addEventListener('click', async () => {
     const url = document.getElementById('manifestUrl').value.trim();
     if (url && !/^https?:\/\//.test(url)) {
-      toast('Die URL muss mit http:// oder https:// beginnen.', 'error');
+      toast(t('toast.badUrl'), 'error');
       return;
     }
     state.settings = (await call(api.settings.set({ manifestUrl: url }))) || state.settings;
@@ -698,13 +849,21 @@ function wireSettings() {
     const result = await call(api.app.checkForUpdates());
     if (!result) return;
     if (result.note) toast(result.note);
-    else if (result.available) toast(`Launcher-Update v${result.version} gefunden.`, 'success');
-    else toast('Der Launcher ist auf dem neuesten Stand.', 'success');
+    else if (result.available) toast(t('toast.updateFound', { version: result.version }), 'success');
+    else toast(t('toast.upToDate'), 'success');
   });
 
   document.getElementById('btnOpenData').addEventListener('click', () => {
     call(api.app.openDataDir());
   });
+
+  const btnUninstall = document.getElementById('btnUninstall');
+  if (btnUninstall) {
+    btnUninstall.addEventListener('click', uninstallLauncher);
+    document.getElementById('btnShowUninstaller').addEventListener('click', () => {
+      call(api.app.showUninstaller());
+    });
+  }
 }
 
 document.addEventListener('click', async (event) => {
@@ -773,17 +932,17 @@ api.library.onChanged(async () => {
 });
 
 api.games.onExited((info) => {
-  if (info.error) toast(`Start fehlgeschlagen: ${info.error}`, 'error');
+  if (info.error) toast(t('toast.launchFailed', { error: info.error }), 'error');
 });
 
 api.app.onLauncherUpdate((info) => {
   state.launcherUpdate = info;
   if (info.state === 'ready') {
     el.updateBar.hidden = false;
-    el.updateBarText.textContent = `Launcher-Update v${info.version} ist bereit.`;
+    el.updateBarText.textContent = t('update.ready', { version: info.version });
   } else if (info.state === 'downloading') {
     el.updateBar.hidden = false;
-    el.updateBarText.textContent = `Launcher-Update wird geladen… ${info.percent} %`;
+    el.updateBarText.textContent = t('update.downloading', { n: info.percent });
   }
 });
 
@@ -800,13 +959,18 @@ async function queuePendingUpdates() {
     await call(api.games.install(game), { silent: true });
   }
   if (pending.length) {
-    toast(`${pending.length} Update${pending.length === 1 ? '' : 's'} werden geladen.`, 'success');
+    toast(t('toast.autoUpdates', { n: pending.length }), 'success');
   }
 }
 
 async function boot() {
   state.settings = (await call(api.settings.get(), { silent: true })) || {};
   state.appInfo = (await call(api.app.info(), { silent: true })) || {};
+  state.uninstaller = (await call(api.app.uninstallerInfo(), { silent: true })) || state.uninstaller;
+
+  // Vor dem ersten render(), sonst blitzt kurz die falsche Sprache auf.
+  applyLanguage();
+
   await loadLibrary();
   await loadQueue();
   await loadCatalog();

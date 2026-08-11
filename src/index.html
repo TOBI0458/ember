@@ -10,30 +10,45 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Warmer Schein im Hintergrund, rein dekorativ -->
+    <div class="ambient" aria-hidden="true"></div>
+
     <!-- Eigene Titelleiste, damit das Fenster wie bei Steam/Epic aussieht -->
     <header class="titlebar">
       <div class="titlebar__drag">
         <div class="brand">
-          <span class="brand__mark"></span>
+          <span class="brand__mark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                class="brand__flame"
+                d="M12 2.2c3.4 3.2 5.7 6.2 5.7 9.9a5.7 5.7 0 0 1-11.4 0c0-2.1.9-3.8 2.3-5.3.3 1 .9 1.8 1.7 2.2.6-2.5.3-4.6 1.7-6.8z"
+              />
+              <path
+                class="brand__core"
+                d="M12.1 11.5c1.4 1.4 2.3 2.6 2.3 4a2.4 2.4 0 0 1-4.8 0c0-1.1.6-2 1.4-2.9.2.5.5.8.9 1 .3-.8.3-1.5.2-2.1z"
+              />
+            </svg>
+          </span>
           <span class="brand__name">Ember</span>
         </div>
         <nav class="tabs" id="tabs">
-          <button class="tab is-active" data-view="store">Store</button>
-          <button class="tab" data-view="library">Bibliothek</button>
+          <button class="tab is-active" data-view="store"><span data-i18n="tab.store">Store</span></button>
+          <button class="tab" data-view="library"><span data-i18n="tab.library">Bibliothek</span></button>
           <button class="tab" data-view="downloads">
-            Downloads <span class="tab__badge" id="queueBadge" hidden>0</span>
+            <span data-i18n="tab.downloads">Downloads</span>
+            <span class="tab__badge" id="queueBadge" hidden>0</span>
           </button>
-          <button class="tab" data-view="settings">Einstellungen</button>
+          <button class="tab" data-view="settings"><span data-i18n="tab.settings">Einstellungen</span></button>
         </nav>
       </div>
       <div class="window-controls">
-        <button id="btnMinimize" title="Minimieren" aria-label="Minimieren">
+        <button id="btnMinimize" data-i18n-title="window.minimize">
           <svg viewBox="0 0 12 12"><path d="M2 6h8" /></svg>
         </button>
-        <button id="btnMaximize" title="Maximieren" aria-label="Maximieren">
+        <button id="btnMaximize" data-i18n-title="window.maximize">
           <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" /></svg>
         </button>
-        <button id="btnClose" class="is-danger" title="Schließen" aria-label="Schließen">
+        <button id="btnClose" class="is-danger" data-i18n-title="window.close">
           <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
         </button>
       </div>
@@ -47,41 +62,59 @@
             <circle cx="7" cy="7" r="4.5" />
             <path d="M10.5 10.5L14 14" />
           </svg>
-          <input id="search" type="search" placeholder="Suchen" autocomplete="off" />
+          <input id="search" type="search" data-i18n-placeholder="sidebar.search" autocomplete="off" />
         </div>
 
         <div class="sidebar__section">
           <div class="sidebar__label">
-            <span>Installiert</span>
+            <span data-i18n="sidebar.installed">Installiert</span>
             <span id="installedCount" class="pill">0</span>
           </div>
           <ul class="game-list" id="sidebarInstalled"></ul>
         </div>
 
         <div class="sidebar__section">
-          <div class="sidebar__label"><span>Alle Spiele</span></div>
+          <div class="sidebar__label"><span data-i18n="sidebar.allGames">Alle Spiele</span></div>
           <ul class="game-list" id="sidebarCatalog"></ul>
         </div>
 
         <div class="sidebar__footer">
-          <div class="sidebar__status" id="catalogStatus">Katalog wird geladen…</div>
-          <button class="btn btn--ghost btn--block" id="btnRefresh">Katalog aktualisieren</button>
+          <!-- Kein data-i18n: den Text schreibt renderSidebar(), er hängt am Zustand. -->
+          <div class="sidebar__status" id="catalogStatus">…</div>
+          <button class="btn btn--ghost btn--block" id="btnRefresh" data-i18n="sidebar.refresh">
+            Katalog aktualisieren
+          </button>
         </div>
       </aside>
 
       <main class="content" id="content">
-        <div class="loading">Wird geladen…</div>
+        <div class="loading" data-i18n="common.loading">Wird geladen…</div>
       </main>
     </div>
 
     <!-- Banner für Launcher-Updates -->
     <div class="update-bar" id="updateBar" hidden>
+      <span class="update-bar__pulse"></span>
       <span id="updateBarText"></span>
-      <button class="btn btn--primary btn--sm" id="updateBarAction">Neu starten</button>
+      <button class="btn btn--primary btn--sm" id="updateBarAction" data-i18n="update.restart">Neu starten</button>
+    </div>
+
+    <!-- Rückfrage vor allem, was etwas löscht -->
+    <div class="modal" id="modal" hidden>
+      <div class="modal__backdrop" id="modalBackdrop"></div>
+      <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <h2 class="modal__title" id="modalTitle"></h2>
+        <p class="modal__text" id="modalText"></p>
+        <div class="modal__actions">
+          <button class="btn btn--ghost" id="modalCancel"></button>
+          <button class="btn btn--danger-solid" id="modalOk"></button>
+        </div>
+      </div>
     </div>
 
     <div class="toasts" id="toasts"></div>
 
+    <script src="i18n.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

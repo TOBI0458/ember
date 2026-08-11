@@ -11,7 +11,8 @@
     "demo": "node scripts/make-demo.js",
     "publish-game": "node scripts/publish-game.js",
     "icon": "node scripts/make-icon.js",
-    "predist": "node scripts/make-icon.js",
+    "art": "node scripts/make-installer-art.js",
+    "predist": "node scripts/make-icon.js && node scripts/make-installer-art.js",
     "dist": "electron-builder --win",
     "release": "node scripts/release-launcher.js"
   },
@@ -46,8 +47,15 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Ember"
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ember",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "include": "nsis/installer.nsh",
+      "uninstallDisplayName": "Ember ${version}"
     },
     "publish": [
       {

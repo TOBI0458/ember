@@ -46,7 +46,10 @@ const DEFAULT_SETTINGS = {
   manifestUrl: '',
   installDir: '',
   autoUpdateGames: true,
-  closeToTray: false
+  closeToTray: false,
+  // Leer heisst: der Launcher richtet sich nach der Sprache von Windows.
+  // Sonst das Kuerzel einer Sprache aus src/i18n.js, etwa "de" oder "en".
+  language: ''
 };
 
 class JsonFile {

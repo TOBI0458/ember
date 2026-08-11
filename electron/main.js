@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 
 const { fetchCatalog } = require('./catalog');
@@ -61,6 +62,25 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+/* --------------------------------------------------- Launcher entfernen */
+
+// Der NSIS-Installer legt sein Deinstallations-Programm als
+// "Uninstall <Produktname>.exe" neben die Programmdatei - siehe
+// templates/nsis/common.nsh in app-builder-lib. Genau diese Datei ruft auch
+// Windows auf, wenn man Ember unter "Apps & Features" entfernt. Wir suchen
+// nach dem Muster statt nach dem festen Namen, damit eine Umbenennung des
+// Produkts hier nichts kaputt macht.
+function findUninstaller() {
+  if (!app.isPackaged || process.platform !== 'win32') return null;
+  const dir = path.dirname(app.getPath('exe'));
+  try {
+    const hit = fs.readdirSync(dir).find((name) => /^Uninstall .+\.exe$/i.test(name));
+    return hit ? path.join(dir, hit) : null;
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------ IPC */
@@ -149,8 +169,35 @@ function registerIpc() {
     version: app.getVersion(),
     isPackaged: app.isPackaged,
     platform: process.platform,
-    dataDir: app.getPath('userData')
+    dataDir: app.getPath('userData'),
+    // Sprache von Windows, z. B. "de-DE". Steht in den Einstellungen keine
+    // Sprache, waehlt die Oberflaeche danach aus.
+    systemLocale: app.getLocale()
   }));
+
+  handle('app:uninstallerInfo', () => {
+    const file = findUninstaller();
+    return { available: Boolean(file), path: file };
+  });
+
+  handle('app:showUninstaller', async () => {
+    const file = findUninstaller();
+    if (!file) throw new Error('UNINSTALLER_NOT_FOUND');
+    shell.showItemInFolder(file);
+    return true;
+  });
+
+  handle('app:uninstall', async () => {
+    const file = findUninstaller();
+    if (!file) throw new Error('UNINSTALLER_NOT_FOUND');
+    // Losgeloest starten, sonst nimmt das Beenden des Launchers das
+    // Deinstallations-Programm gleich mit.
+    spawn(file, [], { detached: true, stdio: 'ignore' }).unref();
+    // Erst wenn es wirklich laeuft, machen wir den Ordner frei. Es fragt
+    // ohnehin noch einmal nach, bevor es etwas loescht.
+    setTimeout(() => app.quit(), 800);
+    return true;
+  });
 
   handle('app:checkForUpdates', async () => {
     if (!app.isPackaged) {
