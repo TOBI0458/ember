@@ -1,9 +1,9 @@
 'use strict';
 
-// Der Katalog ist eine einzige games.json.
-// Live liegt sie in deinem GitHub-Repo, z. B.
-//   https://raw.githubusercontent.com/DEIN-NAME/launcher-katalog/main/games.json
-// Solange keine URL eingetragen ist, läuft der Launcher gegen demo/games.json.
+// Der Katalog ist eine einzige games.json. Live liegt sie im Repo
+// launcher-katalog; die Adresse steht unter "ember" in der package.json und
+// ist im fertigen Launcher schon eingebaut. Wer den Launcher geschickt bekommt,
+// muss also nichts einstellen. Nur wer "demo" einträgt, sieht die Beispiele.
 
 const fs = require('fs');
 const path = require('path');
@@ -70,7 +70,9 @@ function normalize(catalog) {
 async function fetchCatalog() {
   const { manifestUrl } = getSettings();
 
-  if (!manifestUrl) {
+  // getSettings() liefert immer eine URL - leer wird zum eingebauten Katalog.
+  // Die Demo-Beispiele erreicht man nur noch absichtlich.
+  if (!manifestUrl || manifestUrl === 'demo') {
     return { source: 'demo', ...normalize(loadDemoCatalog()) };
   }
 

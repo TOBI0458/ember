@@ -166,12 +166,13 @@ async function loadCatalog({ notify } = {}) {
     return;
   }
   state.catalog = data;
+  const count = data.games.length;
   const labels = {
-    demo: 'Demo-Katalog (keine Manifest-URL gesetzt)',
-    remote: `${data.games.length} Spiele · aktuell`,
+    demo: 'Demo-Katalog (Beispielspiele)',
+    remote: count ? `${count} Spiele · aktuell` : 'Noch keine Spiele veröffentlicht',
     cache: 'Offline — letzter bekannter Stand'
   };
-  state.status = labels[data.source] || `${data.games.length} Spiele`;
+  state.status = labels[data.source] || `${count} Spiele`;
   el.catalogStatus.textContent = state.status;
   if (notify) toast('Katalog aktualisiert.', 'success');
   render();
@@ -278,16 +279,19 @@ function cardHtml(game) {
 function renderStore() {
   const games = filtered();
   if (!games.length) {
+    // Ein leerer Store ist der Normalfall am Anfang, kein Fehler. Deshalb hier
+    // kein Hinweis auf Einstellungen - da muss niemand etwas reparieren.
+    const message = state.search
+      ? 'Andere Suche versuchen.'
+      : state.catalog.source === 'cache'
+        ? 'Gerade keine Verbindung. Der Store füllt sich, sobald du wieder online bist.'
+        : 'Noch nichts veröffentlicht. Neue Spiele erscheinen hier von allein.';
     return `
       <div class="page">
         <div class="empty">
           <div>
-            <div class="empty__title">Keine Spiele gefunden</div>
-            <div>${
-              state.search
-                ? 'Andere Suche versuchen.'
-                : 'Trage unter Einstellungen die URL deiner games.json ein.'
-            }</div>
+            <div class="empty__title">${state.search ? 'Keine Spiele gefunden' : 'Der Store ist noch leer'}</div>
+            <div>${message}</div>
           </div>
         </div>
       </div>`;
@@ -594,10 +598,9 @@ function renderSettings() {
       </div>
 
       <div class="callout">
-        <strong>So veröffentlichst du ein Spiel:</strong> ZIP als Asset in ein GitHub-Release
-        hochladen, dann in deiner <code>games.json</code> die <code>version</code> und die
-        <code>download.url</code> anpassen und die Datei committen. Beim nächsten Start sehen
-        alle das Update — du musst niemandem etwas schicken.
+        <strong>Alles aktualisiert sich von selbst.</strong> Neue Spiele erscheinen im Store,
+        sobald sie veröffentlicht sind, und der Launcher zieht sich seine eigenen Updates im
+        Hintergrund. Du musst hier nichts einstellen und nie wieder etwas herunterladen.
       </div>
 
       <div class="form-row">
@@ -608,9 +611,8 @@ function renderSettings() {
                  value="${escapeHtml(s.manifestUrl || '')}" />
           <button class="btn" id="btnSaveManifest">Speichern</button>
         </div>
-        <div class="hint">Leer lassen, um den mitgelieferten Demo-Katalog zu benutzen. Aktueller Stand: ${escapeHtml(
-          state.status
-        )}</div>
+        <div class="hint">Steht schon richtig drin. Feld leeren und speichern setzt sie
+          zurück. Aktueller Stand: ${escapeHtml(state.status)}</div>
       </div>
 
       <div class="form-row">
@@ -789,23 +791,33 @@ el.updateBarAction.addEventListener('click', () => api.app.installLauncherUpdate
 
 /* ------------------------------------------------------------------ Start */
 
+// Automatische Spiel-Updates: still im Hintergrund einreihen. Die Warteschlange
+// kennt jede Kennung nur einmal, doppeltes Einreihen kann also nichts anrichten.
+async function queuePendingUpdates() {
+  if (!state.settings.autoUpdateGames) return;
+  const pending = state.catalog.games.filter((g) => statusOf(g) === 'update');
+  for (const game of pending) {
+    await call(api.games.install(game), { silent: true });
+  }
+  if (pending.length) {
+    toast(`${pending.length} Update${pending.length === 1 ? '' : 's'} werden geladen.`, 'success');
+  }
+}
+
 async function boot() {
   state.settings = (await call(api.settings.get(), { silent: true })) || {};
   state.appInfo = (await call(api.app.info(), { silent: true })) || {};
   await loadLibrary();
   await loadQueue();
   await loadCatalog();
+  await queuePendingUpdates();
 
-  // Automatische Spiel-Updates: still im Hintergrund einreihen.
-  if (state.settings.autoUpdateGames) {
-    const pending = state.catalog.games.filter((g) => statusOf(g) === 'update');
-    for (const game of pending) {
-      await call(api.games.install(game), { silent: true });
-    }
-    if (pending.length) {
-      toast(`${pending.length} Update${pending.length === 1 ? '' : 's'} werden geladen.`, 'success');
-    }
-  }
+  // Wer den Launcher offen liegen laesst, soll ein neues Spiel trotzdem sehen,
+  // ohne ihn neu zu starten. Alle fuenfzehn Minuten ein Blick genuegt dafuer.
+  setInterval(async () => {
+    await loadCatalog();
+    await queuePendingUpdates();
+  }, 15 * 60 * 1000);
 }
 
 boot();

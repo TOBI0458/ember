@@ -9,10 +9,16 @@ npm install
 npm start
 ```
 
-Beim ersten Start läuft der Launcher gegen einen mitgelieferten Demo-Katalog mit
-drei kleinen, wirklich spielbaren Spielen. Damit kannst du Installieren,
-Aktualisieren, Starten und Deinstallieren sofort ausprobieren, ohne irgendetwas
-einzurichten.
+Der Launcher zeigt den echten Katalog aus `launcher-katalog` — die Adresse steht
+unter `ember.catalogUrl` in der `package.json` und ist fest eingebaut. Wer den
+Launcher geschickt bekommt, sieht die Spiele also sofort und muss nichts
+einstellen.
+
+Zum Ausprobieren gibt es drei kleine, wirklich spielbare Beispiele. Dafür in den
+Einstellungen als Katalog-URL einfach `demo` eintragen.
+
+Wie du den Launcher verschickst und aktuell hältst, steht in
+[VERTEILEN.md](VERTEILEN.md).
 
 ---
 
@@ -74,16 +80,20 @@ Lege darin eine Datei `games.json` an:
 `cover`, `hero` und `screenshots` darfst du weglassen — der Launcher erzeugt dann
 aus der Spiel-ID einen eigenen Farbverlauf als Platzhalter.
 
-### 2. Die Roh-URL im Launcher eintragen
+### 2. Wo der Launcher sie sucht
 
-Öffne auf GitHub deine `games.json`, klicke **Raw** und kopiere die Adresse. Sie
-sieht so aus:
+Die Adresse steht in der `package.json`:
 
+```json
+"ember": {
+  "catalogUrl": "https://raw.githubusercontent.com/TOBI0458/launcher-katalog/main/games.json"
+}
 ```
-https://raw.githubusercontent.com/DEIN-NAME/mein-launcher-katalog/main/games.json
-```
 
-Diese URL trägst du im Launcher unter **Einstellungen → Katalog-URL** ein. Fertig.
+Von dort landet sie beim Bauen im fertigen Launcher. Sie zeigt auf **Raw**, nicht
+auf die normale GitHub-Seite — sonst käme HTML statt JSON zurück. Im Feld
+**Einstellungen → Katalog-URL** lässt sie sich überschreiben; leert man das Feld,
+gilt wieder der eingebaute Wert.
 
 ---
 
@@ -119,18 +129,23 @@ die Installation ab, statt eine kaputte Datei zu entpacken.
 ## Den Launcher selbst verteilen
 
 ```bash
-npm run dist
+npm run release
 ```
 
-Das erzeugt einen Windows-Installer unter `dist/`. Den schickst du **einmal** an
-deine Spieler. Danach aktualisiert sich der Launcher selbst über GitHub-Releases:
+Baut den Windows-Installer, legt das GitHub-Release an und hängt `latest.yml`
+mit dazu — die Datei, an der alle schon verteilten Launcher das Update erkennen.
 
-1. In `package.json` unter `build.publish` deinen GitHub-Namen und das Repo eintragen.
-2. `version` in `package.json` erhöhen, `npm run dist` laufen lassen.
-3. Die Dateien aus `dist/` (inklusive `latest.yml`) als GitHub-Release hochladen.
+Für eine neue Fassung dasselbe mit höherer Nummer:
+
+```bash
+npm run release -- --version 0.2.0
+```
 
 Der Launcher prüft beim Start auf neue Versionen, lädt sie im Hintergrund und
-zeigt unten eine Leiste zum Neustarten an.
+zeigt unten eine Leiste zum Neustarten an. Ausführlich in
+[VERTEILEN.md](VERTEILEN.md).
+
+`npm run dist` baut nur, ohne zu veröffentlichen.
 
 ---
 
@@ -147,6 +162,9 @@ zeigt unten eine Leiste zum Neustarten an.
 | `electron/store.js` | Einstellungen und Bibliothek als JSON |
 | `src/` | die Oberfläche (HTML, CSS, ein JS) |
 | `scripts/make-demo.js` | baut den Demo-Katalog |
+| `scripts/publish-game.js` | packt ein Spiel und trägt es in den Katalog ein |
+| `scripts/release-launcher.js` | baut den Installer und veröffentlicht ihn |
+| `scripts/make-icon.js` | zeichnet `build/icon.png` für den Installer |
 
 Einstellungen und Bibliothek liegen unter
 `%APPDATA%\Ember\` und sind normale, lesbare JSON-Dateien.

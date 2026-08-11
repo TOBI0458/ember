@@ -3,6 +3,9 @@ dist/
 demo/dist/
 *.log
 
+# Wird vor jedem Build aus scripts/make-icon.js neu gezeichnet
+build/
+
 # Hilfsfenster mit Pfaden, die nur auf diesem Rechner stimmen
 hochladen.bat
 *-protokoll.txt

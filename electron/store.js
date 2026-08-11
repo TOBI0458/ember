@@ -28,9 +28,21 @@ function writeJson(file, value) {
   fs.renameSync(tmp, file);
 }
 
+// Wohin der Launcher schaut, wenn niemand etwas umgestellt hat. Der Wert steht
+// in der package.json, damit Launcher und Veroeffentlichungs-Skripte dieselbe
+// Adresse benutzen. Wichtig: Wer den Launcher geschickt bekommt, soll die
+// Spiele sofort sehen - ohne in den Einstellungen irgendetwas einzutragen.
+const DEFAULT_CATALOG_URL =
+  (() => {
+    try {
+      return require('../package.json').ember.catalogUrl;
+    } catch {
+      return 'https://raw.githubusercontent.com/TOBI0458/launcher-katalog/main/games.json';
+    }
+  })();
+
 const DEFAULT_SETTINGS = {
-  // Leer = Demo-Katalog aus demo/games.json. Trage hier die Roh-URL deiner
-  // games.json auf GitHub ein, sobald du live gehst.
+  // Leer = eingebauter Katalog (siehe oben). "demo" = mitgelieferte Beispiele.
   manifestUrl: '',
   installDir: '',
   autoUpdateGames: true,
@@ -74,6 +86,12 @@ function getSettings() {
   if (!s.installDir) {
     s.installDir = path.join(dataDir(), 'Games');
   }
+  // Ein leeres Feld heisst "Standard", nicht "kein Katalog". Sonst stuende bei
+  // allen, die den Launcher vor dieser Aenderung installiert haben, weiter die
+  // alte leere Einstellung in der settings.json - und ihr Store bliebe leer.
+  if (!s.manifestUrl) {
+    s.manifestUrl = DEFAULT_CATALOG_URL;
+  }
   return s;
 }
 
@@ -105,6 +123,7 @@ function removeInstalled(gameId) {
 }
 
 module.exports = {
+  DEFAULT_CATALOG_URL,
   dataDir,
   readJson,
   writeJson,

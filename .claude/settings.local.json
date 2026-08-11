@@ -55,7 +55,18 @@
       "PowerShell(git config --global --get user.name)",
       "PowerShell(git config --global --get user.email)",
       "PowerShell(git config --global --get init.defaultBranch)",
-      "PowerShell(winget install --id GitHub.cli --source winget --accept-source-agreements --silent 2>&1)"
+      "PowerShell(winget install --id GitHub.cli --source winget --accept-source-agreements --silent 2>&1)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Horror Game\" -Force | Select-Object Name, Length; Write-Output \"=== Editoren ===\"; Get-ChildItem \"C:\\\\Program Files\\\\Unity\\\\Hub\\\\Editor\" -ErrorAction SilentlyContinue | Select-Object Name; Write-Output \"=== Hub-Config ===\"; $p=\"$env:APPDATA\\\\UnityHub\\\\secondaryInstallPath.json\"; if \\(Test-Path $p\\) { Get-Content $p })",
+      "PowerShell($u=\"C:\\\\Program Files\\\\Unity\\\\Hub\\\\Editor\\\\6000.3.11f1\\\\Editor\\\\Unity.exe\"; if \\(Test-Path $u\\) { Write-Output \"OK: $u\"; \\(Get-Item $u\\).VersionInfo.FileVersion } else { Write-Output \"FEHLT\" })",
+      "PowerShell($t=\"C:\\\\Program Files\\\\Unity\\\\Hub\\\\Editor\\\\6000.3.11f1\\\\Editor\\\\Data\\\\Resources\\\\PackageManager\\\\ProjectTemplates\\\\libcache\\\\com.unity.template.3d-cross-platform-17.0.14\"; Get-ChildItem $t -Recurse -Force -Include \"manifest.json\",\"package.json\" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring\\($t.Length\\) })",
+      "PowerShell($d=\"C:\\\\Users\\\\tobia\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-tobia-OneDrive-Desktop-Claude-Launcher\\\\866f8331-4928-4d8c-8bf9-8642b7e4882e\\\\scratchpad\\\\tpl\\\\package\\\\ProjectData~\"; Get-ChildItem $d -Recurse -File | ForEach-Object { $_.FullName.Substring\\($d.Length\\) })",
+      "PowerShell(Get-Process Unity -ErrorAction SilentlyContinue)",
+      "PowerShell(\"---KATALOG---\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Projekte\")",
+      "PowerShell(Move-Item \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Horror Game\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Projekte\\\\The Hollow Halls\")",
+      "PowerShell(Move-Item \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\launcher-katalog\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Projekte\\\\launcher-katalog\")",
+      "PowerShell(Rename-Item -Path \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Projekte\" -NewName \"Ember Launcher\" -ErrorAction Stop)",
+      "PowerShell(try { Move-Item \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Claude Launcher\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Ember Launcher\\\\Ember\" -ErrorAction Stop; \"verschoben\" } catch { \"GESPERRT: \" + $_.Exception.Message }; echo \"---- Desktop ----\"; Get-ChildItem \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\" -Force -Directory | Select-Object -ExpandProperty Name; echo \"---- Ember Launcher ----\"; Get-ChildItem \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\Ember Launcher\" | Select-Object -ExpandProperty Name)"
     ]
   }
 }

@@ -147,9 +147,10 @@ async function main() {
       '           Trage ihn unter build.publish.owner ein.'
     );
   }
-  // In welches Repo die Spiel-ZIPs als Release wandern. Einmal in der
-  // package.json eintragen, dann muss man es nie wieder mittippen.
-  const assetRepo = args.repo || publish.gamesRepo || args.id;
+  // In welches Repo die Spiel-ZIPs als Release wandern. Steht unter "ember" in
+  // der package.json - nicht unter "build.publish", denn dort duldet
+  // electron-builder nur seine eigenen Felder und bricht sonst den Build ab.
+  const assetRepo = args.repo || (pkg.ember && pkg.ember.gamesRepo) || args.id;
 
   /* --- packen --- */
 

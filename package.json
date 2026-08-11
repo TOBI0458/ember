@@ -10,7 +10,14 @@
     "start": "electron .",
     "demo": "node scripts/make-demo.js",
     "publish-game": "node scripts/publish-game.js",
-    "dist": "electron-builder --win"
+    "icon": "node scripts/make-icon.js",
+    "predist": "node scripts/make-icon.js",
+    "dist": "electron-builder --win",
+    "release": "node scripts/release-launcher.js"
+  },
+  "ember": {
+    "catalogUrl": "https://raw.githubusercontent.com/TOBI0458/launcher-katalog/main/games.json",
+    "gamesRepo": "launcher-katalog"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
@@ -29,21 +36,24 @@
       "demo/games.json",
       "package.json"
     ],
+    "artifactName": "Ember-Setup-${version}.${ext}",
     "win": {
+      "icon": "build/icon.png",
       "target": [
         "nsis"
       ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Ember"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "TOBI0458",
-        "repo": "ember",
-        "gamesRepo": "launcher-katalog"
+        "repo": "ember"
       }
     ]
   }
