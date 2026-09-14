@@ -1,32 +1,12 @@
 'use strict';
 
-/*
- * Malt die beiden Bilder, die der Installer anzeigt:
- *
- *   build/installerSidebar.bmp   164 x 314   dunkel, Willkommens- und Schlussseite
- *   build/installerHeader.bmp    150 x  57   hell, Kopfzeile der Seiten dazwischen
- *
- * Die Groessen sind von NSIS fest vorgegeben - weicht eine ab, bricht der Build
- * ab. Deshalb stehen sie hier als Konstanten und werden nirgends gerechnet.
- *
- * Warum BMP und nicht PNG? NSIS kann nur BMP. Dafuer ist das Format simpel:
- * ein Kopf und danach die Bildpunkte, zeilenweise von unten nach oben.
- *
- * Die Kopfzeile ist absichtlich hell: sie sitzt im Dialogfenster von Windows,
- * und ein dunkler Klotz auf weissem Grund sieht aus wie ein Fehler.
- *
- *   npm run art
- */
-
 const fs = require('fs');
 const path = require('path');
 
-const SAMPLES = 3; // 3x3 Unterabtastung je Bildpunkt - glaettet Kanten
-
-/* ------------------------------------------------------------------- BMP */
+const SAMPLES = 3;
 
 function writeBmp(file, width, height, rgb) {
-  // Jede Bildzeile wird auf ein Vielfaches von 4 Byte aufgefuellt.
+
   const pad = (4 - ((width * 3) % 4)) % 4;
   const rowSize = width * 3 + pad;
   const pixels = rowSize * height;
@@ -34,22 +14,22 @@ function writeBmp(file, width, height, rgb) {
   const buf = Buffer.alloc(54 + pixels);
   buf.write('BM', 0, 'ascii');
   buf.writeUInt32LE(54 + pixels, 2);
-  buf.writeUInt32LE(54, 10); // wo die Bildpunkte anfangen
-  buf.writeUInt32LE(40, 14); // Groesse des Info-Kopfes
+  buf.writeUInt32LE(54, 10);
+  buf.writeUInt32LE(40, 14);
   buf.writeInt32LE(width, 18);
-  buf.writeInt32LE(height, 22); // positiv heisst: unterste Zeile zuerst
+  buf.writeInt32LE(height, 22);
   buf.writeUInt16LE(1, 26);
-  buf.writeUInt16LE(24, 28); // 24 Bit, kein Alphakanal
+  buf.writeUInt16LE(24, 28);
   buf.writeUInt32LE(0, 30);
   buf.writeUInt32LE(pixels, 34);
-  buf.writeInt32LE(2835, 38); // ~72 dpi
+  buf.writeInt32LE(2835, 38);
   buf.writeInt32LE(2835, 42);
 
   for (let y = 0; y < height; y += 1) {
     const dst = 54 + (height - 1 - y) * rowSize;
     for (let x = 0; x < width; x += 1) {
       const src = (y * width + x) * 3;
-      buf[dst + x * 3] = rgb[src + 2]; // BMP speichert Blau zuerst
+      buf[dst + x * 3] = rgb[src + 2];
       buf[dst + x * 3 + 1] = rgb[src + 1];
       buf[dst + x * 3 + 2] = rgb[src];
     }
@@ -59,8 +39,6 @@ function writeBmp(file, width, height, rgb) {
   fs.writeFileSync(file, buf);
 }
 
-/* ------------------------------------------------------------- Geometrie */
-
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 function mix(a, b, t) {
@@ -68,7 +46,6 @@ function mix(a, b, t) {
   return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
 }
 
-// Abstand eines Punktes zu einer Strecke.
 function distToSegment(px, py, ax, ay, bx, by) {
   const pax = px - ax;
   const pay = py - ay;
@@ -90,10 +67,6 @@ function distToStrokes(px, py, strokes) {
   return best;
 }
 
-/* ---------------------------------------------------------------- Schrift */
-
-// Ein Bogen als Streckenzug. Winkel 0 zeigt nach oben, 180 nach unten,
-// die Woelbung geht nach rechts.
 function arc(cx, cy, r, from, to, steps) {
   const pts = [];
   for (let i = 0; i <= steps; i += 1) {
@@ -103,8 +76,6 @@ function arc(cx, cy, r, from, to, steps) {
   return pts;
 }
 
-// Die fuenf Buchstaben von EMBER, gezeichnet als Linienzuege in einem Kaestchen
-// der Hoehe 1. y = 0 ist oben. Mehr Buchstaben braucht hier niemand.
 const GLYPHS = {
   E: {
     width: 0.6,
@@ -137,7 +108,6 @@ const GLYPHS = {
   }
 };
 
-// Setzt das Wort und liefert die Linienzuege in Bildpunkten.
 function layout(text, x0, yTop, height, tracking) {
   const strokes = [];
   let x = x0;
@@ -151,15 +121,11 @@ function layout(text, x0, yTop, height, tracking) {
   return { strokes, width: x - x0 - tracking * height };
 }
 
-// Einmal trocken setzen, um die Breite zu kennen, dann mittig richtig setzen.
 function centered(text, centerX, yTop, height, tracking) {
   const probe = layout(text, 0, yTop, height, tracking);
   return layout(text, centerX - probe.width / 2, yTop, height, tracking);
 }
 
-/* ----------------------------------------------------------------- Flamme */
-
-// Dieselbe Form wie in make-icon.js: unten ein Kreis, nach oben zur Spitze.
 function inFlame(x, y, apexY, centerY, radius, lean) {
   if (y >= centerY) return Math.hypot(x - 0.5, y - centerY) <= radius;
   const u = (centerY - y) / (centerY - apexY);
@@ -169,8 +135,6 @@ function inFlame(x, y, apexY, centerY, radius, lean) {
   return Math.abs(x - cx) <= halfWidth;
 }
 
-// Malt die Flamme in ein quadratisches Kaestchen und gibt die Farbe zurueck -
-// oder null, wenn der Punkt daneben liegt.
 function flameColor(x, y, centerX, centerY, size) {
   const u = (x - (centerX - size / 2)) / size;
   const v = (y - (centerY - size / 2)) / size;
@@ -184,8 +148,6 @@ function flameColor(x, y, centerX, centerY, size) {
   return null;
 }
 
-/* ------------------------------------------------------------- Seitenbild */
-
 const SIDE_W = 164;
 const SIDE_H = 314;
 
@@ -193,8 +155,6 @@ const SIDE_FLAME = { x: 82, y: 126, size: 118 };
 const SIDE_WORD = centered('EMBER', 82, 206, 26, 0.2);
 const SIDE_WORD_STROKE = 3.4;
 
-// Aufsteigende Glut. Fest verdrahtet statt zufaellig, damit zwei Builds
-// dasselbe Bild ergeben - sonst waere jeder Installer minimal anders.
 const SIDE_EMBERS = [
   [46, 96, 2.6, 0.55], [122, 78, 2.0, 0.45], [38, 158, 1.8, 0.4],
   [130, 148, 2.4, 0.5], [58, 54, 1.6, 0.32], [110, 40, 2.2, 0.28],
@@ -206,7 +166,6 @@ const SIDE_EMBERS = [
 function sidebar(x, y) {
   let c = mix([19, 24, 34], [8, 10, 15], y / SIDE_H);
 
-  // Warmer Schein hinter der Flamme, damit die Flaeche nicht tot wirkt.
   const glow = Math.hypot(x - SIDE_FLAME.x, y - SIDE_FLAME.y);
   c = mix(c, [62, 38, 27], Math.max(0, 1 - glow / 115) * 0.8);
 
@@ -222,13 +181,10 @@ function sidebar(x, y) {
     c = [243, 246, 251];
   }
 
-  // Kleiner Strich unter dem Schriftzug.
   if (Math.abs(y - 252) <= 1 && Math.abs(x - 82) <= 26) c = [236, 108, 34];
 
   return c;
 }
-
-/* ------------------------------------------------------------- Kopfzeile */
 
 const HEAD_W = 150;
 const HEAD_H = 57;
@@ -254,8 +210,6 @@ function header(x, y) {
 
   return c;
 }
-
-/* ------------------------------------------------------------------ Bauen */
 
 function render(width, height, fn) {
   const out = Buffer.alloc(width * height * 3);

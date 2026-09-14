@@ -1,9 +1,5 @@
 'use strict';
 
-// Datei-Download mit Redirect-Verfolgung, Fortschritt und Abbruch.
-// GitHub-Release-Assets leiten auf objects.githubusercontent.com um,
-// deshalb ist die Redirect-Behandlung hier Pflicht.
-
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -12,41 +8,47 @@ const crypto = require('crypto');
 const { pathToFileURL, fileURLToPath } = require('url');
 
 const MAX_REDIRECTS = 6;
-const USER_AGENT = 'Ember/0.1 (+https://github.com)';
+const USER_AGENT = (() => {
+  try {
+    return 'Ember/' + require('../package.json').version + ' (+https://github.com)';
+  } catch {
+    return 'Ember (+https://github.com)';
+  }
+})();
 
-function request(url, redirectsLeft) {
+function request(url, redirectsLeft, from = 0) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const mod = parsed.protocol === 'http:' ? http : https;
-    const req = mod.get(
-      url,
-      { headers: { 'User-Agent': USER_AGENT, Accept: '*/*' } },
-      (res) => {
-        const status = res.statusCode || 0;
-        if (status >= 300 && status < 400 && res.headers.location) {
-          res.resume();
-          if (redirectsLeft <= 0) {
-            reject(new Error('Zu viele Weiterleitungen'));
-            return;
-          }
-          const next = new URL(res.headers.location, url).toString();
-          resolve(request(next, redirectsLeft - 1));
+    const headers = { 'User-Agent': USER_AGENT, Accept: '*/*' };
+
+    if (from > 0) headers.Range = `bytes=${from}-`;
+
+    const req = mod.get(url, { headers }, (res) => {
+      const status = res.statusCode || 0;
+      if (status >= 300 && status < 400 && res.headers.location) {
+        res.resume();
+        if (redirectsLeft <= 0) {
+          reject(new Error('Zu viele Weiterleitungen'));
           return;
         }
-        if (status !== 200) {
-          res.resume();
-          reject(new Error(`HTTP ${status} bei ${parsed.host}${parsed.pathname}`));
-          return;
-        }
-        resolve(res);
+        const next = new URL(res.headers.location, url).toString();
+        resolve(request(next, redirectsLeft - 1, from));
+        return;
       }
-    );
+      if (status !== 200 && status !== 206) {
+        res.resume();
+
+        reject(new Error(status === 416 ? 'RANGE_INVALID' : `HTTP ${status} bei ${parsed.host}${parsed.pathname}`));
+        return;
+      }
+      resolve(res);
+    });
     req.on('error', reject);
     req.setTimeout(30000, () => req.destroy(new Error('Zeitüberschreitung beim Verbinden')));
   });
 }
 
-/** Lädt eine URL als Text (für das Katalog-Manifest). */
 async function fetchText(url) {
   if (url.startsWith('file://')) {
     return fs.promises.readFile(fileURLToPath(url), 'utf8');
@@ -57,15 +59,18 @@ async function fetchText(url) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/**
- * Lädt eine Datei auf die Platte.
- * onProgress bekommt { received, total, speedBytesPerSecond }.
- * signal ist ein AbortSignal zum Abbrechen.
- */
-async function downloadFile(url, destination, { onProgress, signal } = {}) {
+function bytesOnDisk(file) {
+  try {
+    const size = fs.statSync(file).size;
+    return Number.isFinite(size) && size > 0 ? size : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function downloadFile(url, destination, { onProgress, signal, resume = false } = {}) {
   fs.mkdirSync(path.dirname(destination), { recursive: true });
 
-  // Lokale Dateien einfach kopieren - das lässt den Demo-Katalog ohne Netz laufen.
   if (url.startsWith('file://')) {
     const src = fileURLToPath(url);
     const total = fs.statSync(src).size;
@@ -74,12 +79,31 @@ async function downloadFile(url, destination, { onProgress, signal } = {}) {
     return { bytes: total, sha256: await hashFile(destination) };
   }
 
-  const res = await request(url, MAX_REDIRECTS);
-  const total = Number(res.headers['content-length'] || 0);
-  const out = fs.createWriteStream(destination);
-  const hash = crypto.createHash('sha256');
+  let from = resume ? bytesOnDisk(destination) : 0;
+  if (!resume) await fs.promises.rm(destination, { force: true }).catch(() => {});
 
-  let received = 0;
+  let res;
+  try {
+    res = await request(url, MAX_REDIRECTS, from);
+  } catch (err) {
+    if (err.message !== 'RANGE_INVALID') throw err;
+
+    await fs.promises.rm(destination, { force: true }).catch(() => {});
+    from = 0;
+    res = await request(url, MAX_REDIRECTS, 0);
+  }
+
+  const resuming = from > 0 && res.statusCode === 206;
+  if (!resuming) from = 0;
+
+  const hash = crypto.createHash('sha256');
+  if (resuming) await feedHash(hash, destination, from);
+
+  const remaining = Number(res.headers['content-length'] || 0);
+  const total = remaining ? from + remaining : 0;
+  const out = fs.createWriteStream(destination, resuming ? { flags: 'a' } : { flags: 'w' });
+
+  let received = from;
   let windowStart = Date.now();
   let windowBytes = 0;
   let speed = 0;
@@ -88,6 +112,7 @@ async function downloadFile(url, destination, { onProgress, signal } = {}) {
     const abort = () => {
       res.destroy();
       out.destroy();
+
       fs.promises.rm(destination, { force: true }).catch(() => {});
       reject(new Error('ABORTED'));
     };
@@ -115,6 +140,15 @@ async function downloadFile(url, destination, { onProgress, signal } = {}) {
       if (onProgress) onProgress({ received, total: total || received, speedBytesPerSecond: speed });
       resolve({ bytes: received, sha256: hash.digest('hex') });
     });
+  });
+}
+
+function feedHash(hash, file, count) {
+  return new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(file, { start: 0, end: count - 1 });
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', resolve);
   });
 }
 

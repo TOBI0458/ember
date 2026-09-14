@@ -1,10 +1,5 @@
 'use strict';
 
-// Der Katalog ist eine einzige games.json. Live liegt sie im Repo
-// launcher-katalog; die Adresse steht unter "ember" in der package.json und
-// ist im fertigen Launcher schon eingebaut. Wer den Launcher geschickt bekommt,
-// muss also nichts einstellen. Nur wer "demo" einträgt, sieht die Beispiele.
-
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
@@ -12,7 +7,7 @@ const { fetchText } = require('./download');
 const { dataDir, readJson, writeJson, getSettings } = require('./store');
 
 function demoDir() {
-  // Im gepackten Build liegt demo/ in app.asar, im Dev-Modus daneben.
+
   return path.join(app.getAppPath(), 'demo');
 }
 
@@ -20,9 +15,6 @@ function cacheFile() {
   return path.join(dataDir(), 'catalog-cache.json');
 }
 
-// Windows-Editoren setzen gern eine unsichtbare Markierung an den Dateianfang.
-// JSON.parse verschluckt sich daran - und zwar auf den Rechnern der Spieler,
-// nicht auf dem eigenen. Deshalb hier grundsaetzlich abschneiden.
 function parseJson(text) {
   return JSON.parse(String(text).replace(/^﻿/, ''));
 }
@@ -30,7 +22,7 @@ function parseJson(text) {
 function loadDemoCatalog() {
   const file = path.join(demoDir(), 'games.json');
   let raw = fs.readFileSync(file, 'utf8');
-  // Die Demo-ZIPs liegen lokal. Der Platzhalter wird zur echten file://-URL.
+
   const distUrl = new URL(`file:///${path.join(demoDir(), 'dist').replace(/\\/g, '/')}`).toString();
   raw = raw.split('{{DEMO_DIST}}').join(distUrl);
   return parseJson(raw);
@@ -54,6 +46,8 @@ function normalize(catalog) {
         screenshots: Array.isArray(g.screenshots) ? g.screenshots : [],
         version: String(g.version || '0.0.0'),
         releaseDate: g.releaseDate || null,
+
+        releaseAt: g.releaseAt || null,
         sizeBytes: Number(g.sizeBytes || 0),
         executable: g.executable || null,
         patchNotes: g.patchNotes || '',
@@ -63,15 +57,9 @@ function normalize(catalog) {
   };
 }
 
-/**
- * Holt den Katalog. Bei Netzproblemen fällt er auf den letzten Cache zurück,
- * damit die Bibliothek auch offline benutzbar bleibt.
- */
 async function fetchCatalog() {
   const { manifestUrl } = getSettings();
 
-  // getSettings() liefert immer eine URL - leer wird zum eingebauten Katalog.
-  // Die Demo-Beispiele erreicht man nur noch absichtlich.
   if (!manifestUrl || manifestUrl === 'demo') {
     return { source: 'demo', ...normalize(loadDemoCatalog()) };
   }

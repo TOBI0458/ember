@@ -147,7 +147,7 @@ Skript fasst nur die technischen Felder an. Patchnotes trennst du mit `|`.
 
 | Du machst | Sie merken |
 | --- | --- |
-| Launcher-Update veröffentlicht | Leiste unten: „Neustarten zum Aktualisieren" |
+| Launcher-Update veröffentlicht | Leiste oben: „Update steht bereit" mit einem Knopf zum **Herunterladen**, danach zum Neustarten. Ab 0.3.0 wird still eingespielt — kein Assistent, keine Ordnerwahl |
 | Neues Spiel veröffentlicht | Es taucht im Store auf — spätestens nach 15 Minuten, ohne Neustart |
 | Spiel-Update veröffentlicht | Oranges **Update**-Abzeichen, lädt je nach Einstellung von selbst |
 
@@ -166,12 +166,27 @@ Es muss öffentlich sein, sonst kommt niemand an die Datei.
 **Launcher aktualisiert sich nicht** — fast immer die fehlende `latest.yml` im
 Release, oder die Version wurde nicht erhöht.
 
+**„Die Änderungen lassen sich gerade nicht laden"** trotz Internet — dann fehlt
+im gepackten Launcher eine Angabe aus der `package.json`. Beim Packen räumt
+electron-builder dort auf; was zur Laufzeit gebraucht wird, gehört in den
+`ember`-Abschnitt. `npm run release` prüft das seit v0.5.0 selbst und bricht
+vorher ab.
+
 **Spiel lädt, startet aber nicht** — der `executable`-Eintrag passt nicht zur
 echten Datei. Mit `publish-game` kann das nicht passieren, bei Handarbeit schon.
 
 **Prüfsummenfehler beim Installieren** — das ZIP im Release ist ein anderes als
 das, aus dem die Prüfsumme stammt. Neu hochladen. Der Launcher bricht hier
 absichtlich ab, statt eine kaputte Datei zu entpacken — die bereits installierte
-Fassung bleibt dabei unversehrt.
+Fassung bleibt dabei unversehrt, und das kaputte Teilstück wird verworfen,
+damit der nächste Versuch nicht dieselben Bytes fortsetzt.
+
+**„Fehlt eine gültige Prüfsumme"** — im Katalogeintrag steht keine `sha256`.
+Seit der Absicherung wird ohne sie nicht mehr installiert. `publish-game`
+schreibt sie immer; bei einem von Hand gepflegten Eintrag nachtragen.
+
+**„Zu wenig Speicherplatz"** — kommt jetzt VOR dem Download statt mittendrin.
+Gerechnet wird mit dem 2,2-Fachen der Downloadgröße, weil das ZIP und die
+entpackte Fassung eine Zeit lang nebeneinander liegen.
 
 **Windows warnt beim Installieren** — erwartet, siehe oben. Kein Fehler.

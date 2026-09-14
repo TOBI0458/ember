@@ -1,20 +1,9 @@
 'use strict';
 
-/*
- * Packt einen fertigen Spiel-Build, rechnet Groesse und Pruefsumme aus und
- * traegt alles in die games.json des Katalogs ein.
- *
- *   npm run publish-game -- --id hollow-halls --version 0.2.0 --from "C:\Builds\HollowHalls"
- *
- * Was danach noch von Hand kommt, sagt das Skript am Ende selbst.
- */
-
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-
-/* ------------------------------------------------------------ Argumente */
 
 function parseArgs(argv) {
   const out = {};
@@ -37,14 +26,10 @@ function fail(message) {
   process.exit(1);
 }
 
-/* ----------------------------------------------------------- Werkzeuge */
-
-// Einfache Anfuehrungszeichen werden in PowerShell durch Verdoppeln entwertet.
 const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 
 function zipFolder(sourceDir, zipPath) {
-  // .NET packt streamend - das haelt auch bei mehreren Gigabyte durch, waehrend
-  // ein selbstgebauter Packer im Arbeitsspeicher irgendwann aufgibt.
+
   const script =
     'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
     '[System.IO.Compression.ZipFile]::CreateFromDirectory(' +
@@ -60,7 +45,6 @@ function zipFolder(sourceDir, zipPath) {
   }
 }
 
-// Windows-Editoren haengen gern eine unsichtbare Markierung vor die Datei.
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
 }
@@ -86,8 +70,6 @@ function folderSize(dir) {
 
 const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + ' MB';
 
-// Unity legt neben die .exe einen _Data-Ordner. Die echte Startdatei ist die
-// einzige .exe direkt im Wurzelverzeichnis - alles andere sind Hilfsprogramme.
 function findExecutable(dir) {
   const exes = fs
     .readdirSync(dir, { withFileTypes: true })
@@ -97,8 +79,6 @@ function findExecutable(dir) {
   if (exes.length === 0) fail('Keine .exe im Build-Ordner gefunden: ' + dir);
   return exes[0];
 }
-
-/* ---------------------------------------------------------------- Ablauf */
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -137,7 +117,6 @@ async function main() {
     );
   }
 
-  // Besitzer und Repo stehen schon in der package.json fuer das Launcher-Update.
   const pkg = readJson(path.join(root, 'package.json'));
   const publish = (pkg.build && pkg.build.publish && pkg.build.publish[0]) || {};
   const owner = args.owner || publish.owner;
@@ -147,12 +126,8 @@ async function main() {
       '           Trage ihn unter build.publish.owner ein.'
     );
   }
-  // In welches Repo die Spiel-ZIPs als Release wandern. Steht unter "ember" in
-  // der package.json - nicht unter "build.publish", denn dort duldet
-  // electron-builder nur seine eigenen Felder und bricht sonst den Build ab.
-  const assetRepo = args.repo || (pkg.ember && pkg.ember.gamesRepo) || args.id;
 
-  /* --- packen --- */
+  const assetRepo = args.repo || (pkg.ember && pkg.ember.gamesRepo) || args.id;
 
   const outDir = path.resolve(args.out || path.join(catalogDir, '..', 'builds'));
   fs.mkdirSync(outDir, { recursive: true });
@@ -182,8 +157,6 @@ async function main() {
     console.log('\n  ACHTUNG: ueber 2 GB. GitHub nimmt keine groesseren Dateien in ein Release.');
   }
 
-  /* --- Katalog aktualisieren --- */
-
   const catalog = readJson(catalogFile);
   if (!Array.isArray(catalog.games)) catalog.games = [];
 
@@ -208,8 +181,6 @@ async function main() {
     catalog.games.push(entry);
   }
 
-  // Nur die technischen Felder anfassen - Beschreibung und Bilder bleiben so,
-  // wie du sie im Katalog gepflegt hast.
   entry.version = args.version;
   entry.executable = exe;
   entry.sizeBytes = zipped;
@@ -218,8 +189,6 @@ async function main() {
   if (args.notes) entry.patchNotes = String(args.notes).split('|').map((s) => s.trim()).join('\n');
 
   fs.writeFileSync(catalogFile, JSON.stringify(catalog, null, 2) + '\n', 'utf8');
-
-  /* --- Was jetzt noch zu tun ist --- */
 
   const tag = 'v' + args.version;
   console.log('\n  games.json aktualisiert' + (isNew ? '  (neuer Eintrag)' : ''));

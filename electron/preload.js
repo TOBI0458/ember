@@ -1,8 +1,5 @@
 'use strict';
 
-// Die einzige Brücke zwischen Oberfläche und Node. Alles läuft über
-// benannte Kanäle - der Renderer bekommt keinen direkten Dateisystemzugriff.
-
 const { contextBridge, ipcRenderer } = require('electron');
 
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
@@ -15,7 +12,8 @@ const on = (channel) => (callback) => {
 
 contextBridge.exposeInMainWorld('launcher', {
   catalog: {
-    fetch: () => invoke('catalog:fetch')
+    fetch: (force) => invoke('catalog:fetch', force),
+    onChanged: on('catalog:changed')
   },
   library: {
     list: () => invoke('library:list'),
@@ -37,18 +35,23 @@ contextBridge.exposeInMainWorld('launcher', {
   },
   settings: {
     get: () => invoke('settings:get'),
-    set: (partial) => invoke('settings:set', partial),
-    pickInstallDir: () => invoke('settings:pickInstallDir')
+    set: (partial) => invoke('settings:set', partial)
   },
   app: {
     info: () => invoke('app:info'),
     openDataDir: () => invoke('app:openDataDir'),
     checkForUpdates: () => invoke('app:checkForUpdates'),
+    changelog: () => invoke('app:changelog'),
     uninstallerInfo: () => invoke('app:uninstallerInfo'),
     showUninstaller: () => invoke('app:showUninstaller'),
     uninstall: () => invoke('app:uninstall'),
+    downloadLauncherUpdate: () => ipcRenderer.send('launcher:downloadUpdate'),
     installLauncherUpdate: () => ipcRenderer.send('launcher:installUpdate'),
+    launcherUpdateState: () => invoke('app:launcherUpdateState'),
     onLauncherUpdate: on('launcher:update'),
+
+    notify: (title, body) => ipcRenderer.send('app:notify', { title, body }),
+    onWache: on('wache:meldung'),
     openExternal: (url) => invoke('shell:openExternal', url)
   },
   window: {

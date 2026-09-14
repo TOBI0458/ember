@@ -1,23 +1,11 @@
 'use strict';
 
-/*
- * Malt das Programmsymbol nach build/icon.png.
- *
- * Warum selbst gemalt und nicht einfach eine Bilddatei ins Repo gelegt?
- * Weil so nichts verloren gehen kann und die Farben an einer Stelle stehen.
- * electron-builder rechnet das PNG beim Bauen selbst in ein .ico um.
- *
- *   npm run icon
- */
-
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
 const SIZE = 512;
-const SAMPLES = 4; // 4x4 Unterabtastung pro Pixel - das glaettet die Kanten
-
-/* ------------------------------------------------------------------- PNG */
+const SAMPLES = 4;
 
 const CRC_TABLE = (() => {
   const table = new Int32Array(256);
@@ -48,13 +36,12 @@ function writePng(file, pixels, size) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // 8 Bit je Kanal
-  ihdr[9] = 6; // RGBA
+  ihdr[8] = 8;
+  ihdr[9] = 6;
   ihdr[10] = 0;
   ihdr[11] = 0;
   ihdr[12] = 0;
 
-  // Jede Bildzeile bekommt ein fuehrendes Filterbyte - hier immer 0 (keiner).
   const stride = size * 4;
   const raw = Buffer.alloc((stride + 1) * size);
   for (let y = 0; y < size; y += 1) {
@@ -74,11 +61,8 @@ function writePng(file, pixels, size) {
   );
 }
 
-/* ----------------------------------------------------------------- Malen */
-
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * Math.min(1, Math.max(0, t)));
 
-// Abgerundetes Quadrat: Abstand zum Rand, negativ heisst innerhalb.
 function roundedBox(x, y, inset, radius) {
   const dx = Math.abs(x - 0.5) - (0.5 - inset - radius);
   const dy = Math.abs(y - 0.5) - (0.5 - inset - radius);
@@ -87,12 +71,11 @@ function roundedBox(x, y, inset, radius) {
   return Math.hypot(outX, outY) + Math.min(Math.max(dx, dy), 0) - radius;
 }
 
-// Flammenform: unten ein Kreis, nach oben in eine Spitze auslaufend.
 function inFlame(x, y, apexY, centerY, radius, lean) {
   if (y >= centerY) {
     return Math.hypot(x - 0.5, y - centerY) <= radius;
   }
-  const u = (centerY - y) / (centerY - apexY); // 0 am Kreis, 1 an der Spitze
+  const u = (centerY - y) / (centerY - apexY);
   if (u > 1) return false;
   const halfWidth = radius * Math.pow(1 - u, 0.62);
   const cx = 0.5 + lean * Math.sin(Math.PI * u);
@@ -103,7 +86,6 @@ function sample(x, y) {
   const edge = roundedBox(x, y, 0.025, 0.225);
   if (edge > 0) return [0, 0, 0, 0];
 
-  // Hintergrund: oben etwas heller, damit die Kachel nicht flach wirkt.
   let color = mix([26, 32, 46], [11, 14, 20], y);
 
   if (inFlame(x, y, 0.155, 0.675, 0.238, 0.055)) {
@@ -132,7 +114,7 @@ function draw() {
             (px + (sx + 0.5) / SAMPLES) / SIZE,
             (py + (sy + 0.5) / SAMPLES) / SIZE
           );
-          // Farben mit ihrer Deckkraft gewichten, sonst franst der Rand grau aus.
+
           r += c[0] * c[3];
           g += c[1] * c[3];
           b += c[2] * c[3];

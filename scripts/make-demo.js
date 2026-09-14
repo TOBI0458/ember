@@ -1,13 +1,5 @@
 'use strict';
 
-/* =========================================================================
-   Baut den Demo-Katalog: drei kleine, wirklich startbare Spiele als ZIP plus
-   die passende games.json. Damit läuft der komplette Weg - herunterladen,
-   Prüfsumme, entpacken, starten, aktualisieren - ohne Server und ohne Netz.
-
-   Aufruf: npm run demo   (läuft auch automatisch vor npm start)
-   ========================================================================= */
-
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -16,8 +8,6 @@ const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const DEMO = path.join(ROOT, 'demo');
 const DIST = path.join(DEMO, 'dist');
-
-/* ------------------------------------------------------- Minimaler ZIP-Writer */
 
 const CRC_TABLE = (() => {
   const table = new Int32Array(256);
@@ -37,7 +27,6 @@ function crc32(buffer) {
   return (c ^ -1) >>> 0;
 }
 
-/** Erzeugt ein ZIP aus { dateiname: Buffer }. Deflate, wie üblich. */
 function makeZip(files) {
   const chunks = [];
   const central = [];
@@ -51,11 +40,11 @@ function makeZip(files) {
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4); // benötigte Version
-    local.writeUInt16LE(0, 6); // Flags
-    local.writeUInt16LE(8, 8); // Methode: deflate
-    local.writeUInt16LE(0, 10); // Uhrzeit
-    local.writeUInt16LE(0x21, 12); // Datum (1980-01-01)
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(0, 10);
+    local.writeUInt16LE(0x21, 12);
     local.writeUInt32LE(sum, 14);
     local.writeUInt32LE(deflated.length, 18);
     local.writeUInt32LE(raw.length, 22);
@@ -76,7 +65,7 @@ function makeZip(files) {
     dir.writeUInt32LE(deflated.length, 20);
     dir.writeUInt32LE(raw.length, 24);
     dir.writeUInt16LE(nameBuf.length, 28);
-    dir.writeUInt32LE(0, 38); // externe Attribute
+    dir.writeUInt32LE(0, 38);
     dir.writeUInt32LE(offset, 42);
     central.push(dir, nameBuf);
 
@@ -94,8 +83,6 @@ function makeZip(files) {
 
   return Buffer.concat([...chunks, centralBuf, end]);
 }
-
-/* --------------------------------------------------------- Die Demo-Spiele */
 
 function gameHtml({ title, hue, version, tagline }) {
   return `<!DOCTYPE html>
@@ -229,8 +216,6 @@ const GAMES = [
   }
 ];
 
-/* ------------------------------------------------------------------- Bauen */
-
 function build() {
   fs.mkdirSync(DIST, { recursive: true });
 
@@ -258,7 +243,7 @@ function build() {
       featured: Boolean(game.featured),
       executable: 'start.bat',
       patchNotes: game.patchNotes,
-      // Der Platzhalter wird beim Laden durch den echten Pfad ersetzt.
+
       download: { url: `{{DEMO_DIST}}/${fileName}`, sha256 }
     };
   });

@@ -1,28 +1,7 @@
 'use strict';
 
-/* =========================================================================
-   Alle sichtbaren Texte des Launchers, je Sprache einmal.
+const EMBER_I18N = (function () {
 
-   Eine neue Sprache hinzufügen sind zwei Schritte:
-     1. In LANGUAGES eine Zeile ergänzen (code, label, locale, flag).
-     2. In STRINGS einen Block mit demselben Kürzel anlegen.
-   Fehlt dort ein Schlüssel, nimmt der Launcher automatisch den englischen
-   Text - eine halb übersetzte Sprache macht die Oberfläche also nicht kaputt.
-
-   Platzhalter stehen in geschweiften Klammern: "{n} Spiele". Für Ein- und
-   Mehrzahl gibt es zwei Schlüssel mit den Endungen _one und _other; welcher
-   genommen wird, entscheidet t() anhand von {n}.
-
-   Die ganze Datei steckt in einer Funktion, die sofort läuft. Nach außen gibt
-   es nur window.i18n - sonst lägen Namen wie t oder LANGUAGES global herum und
-   app.js könnte sie nicht mehr unter demselben Namen übernehmen. Der Inhalt ist
-   bewusst nicht zusätzlich eingerückt, das würde die Datei nur breiter machen.
-   ========================================================================= */
-
-window.i18n = (function () {
-
-// Kein Flaggen-Emoji dahinter: Windows hat keine Flaggen-Schriftzeichen und
-// zeichnet stattdessen die Länderkürzel als Buchstaben ("GB English").
 const LANGUAGES = [
   { code: 'de', label: 'Deutsch', locale: 'de-DE' },
   { code: 'en', label: 'English', locale: 'en-US' }
@@ -85,11 +64,24 @@ const STRINGS = {
 
     'flag.installed': 'Installiert',
     'flag.update': 'Update',
+    'flag.soon': 'Demnächst',
+    'flag.soonToday': 'Heute',
+    'flag.soonTomorrow': 'Morgen',
+    'flag.soonDays': 'In {n} Tagen',
+    'flag.soonHours': 'In {n} Std.',
 
     'detail.notFound': 'Spiel nicht gefunden',
     'detail.localOnly': 'Lokal installiert',
     'detail.goneFromCatalog': 'Dieses Spiel ist nicht mehr im Katalog enthalten.',
     'detail.install': 'Installieren',
+    'detail.soon': 'Demnächst verfügbar',
+    'detail.soonDate': 'Erscheint am {date}',
+    'detail.soonToday': 'Erscheint heute',
+    'detail.soonTomorrow': 'Erscheint morgen',
+    'detail.soonDays': 'Noch {n} Tage',
+    'detail.soonHours': 'Noch {n} Stunden',
+    'detail.soonSoon': 'Jeden Moment',
+    'detail.soonLate': 'Der Termin ist durch — es dauert noch etwas.',
     'detail.update': 'Aktualisieren',
     'detail.play': 'Spielen',
     'detail.playAnyway': 'Trotzdem spielen',
@@ -124,24 +116,33 @@ const STRINGS = {
     'settings.title': 'Einstellungen',
     'settings.subtitle': 'Launcher v{version} · {platform}',
     'settings.callout':
-      '<strong>Alles aktualisiert sich von selbst.</strong> Neue Spiele erscheinen im Store, ' +
-      'sobald sie veröffentlicht sind, und der Launcher zieht sich seine eigenen Updates im ' +
-      'Hintergrund. Du musst hier nichts einstellen und nie wieder etwas herunterladen.',
+      '<strong>Ember sieht von selbst nach.</strong> Neue Spiele erscheinen im Store, sobald sie ' +
+      'veröffentlicht sind, und nach einer neuen Fassung von Ember sucht der Launcher mehrmals am ' +
+      'Tag. Gemeldet wird sie sofort, heruntergeladen erst auf deinen Klick — damit dir auf einer ' +
+      'getakteten Verbindung niemand ungefragt hundert Megabyte zieht.',
     'settings.language': 'Sprache',
     'settings.languageAuto': 'Automatisch ({language})',
     'settings.languageHint': 'Gilt sofort, ohne Neustart. Automatisch richtet sich nach der Sprache von Windows.',
-    'settings.catalogUrl': 'Katalog-URL (games.json)',
-    'settings.save': 'Speichern',
-    'settings.catalogHint': 'Steht schon richtig drin. Feld leeren und speichern setzt sie zurück. Aktueller Stand: {status}',
-    'settings.installDir': 'Installationsordner',
-    'settings.change': 'Ändern',
-    'settings.installDirHint': 'Bereits installierte Spiele bleiben, wo sie sind.',
     'settings.autoUpdate': 'Spiel-Updates beim Start automatisch herunterladen',
     'settings.autoUpdateHint': 'Aus heißt: Updates werden nur angezeigt, gestartet werden sie von dir.',
     'settings.launcher': 'Launcher',
-    'settings.checkUpdate': 'Nach Launcher-Update suchen',
+    'settings.checkUpdate': 'Jetzt nach Updates suchen',
+    'settings.checking': 'Wird gesucht…',
+    'settings.notices': 'Bescheid sagen, wenn es etwas Neues gibt',
+    'settings.noticesHint':
+      'Neue Spiele im Katalog, Updates für installierte und neue Fassungen von Ember. Liegt Ember im Hintergrund, kommt die Meldung von Windows.',
+    'settings.autostart': 'Mit Windows starten',
+    'settings.autostartHint':
+      'Ember startet mit dem Rechner und wartet im Infobereich neben der Uhr. Nur so kann es Bescheid sagen, ohne dass du es vorher aufmachst.',
+    'settings.background': 'Beim Schließen im Hintergrund weiterlaufen',
+    'settings.backgroundHint':
+      'Das Fenster geht zu, Ember bleibt im Infobereich. Über „Ember beenden“ im Rechtsklickmenü ist es ganz weg.',
     'settings.openData': 'Datenordner öffnen',
     'settings.dataDirHint': 'Datenordner: {dir}',
+    'settings.changelog': 'Was sich zuletzt geändert hat',
+    'settings.changelogCurrent': 'installiert',
+    'settings.changelogOffline': 'Die Änderungen lassen sich gerade nicht laden — dafür braucht es eine Verbindung.',
+    'settings.changelogEmpty': 'Noch keine Fassung veröffentlicht.',
 
     'settings.dangerTitle': 'Ember entfernen',
     'settings.uninstallText':
@@ -153,7 +154,7 @@ const STRINGS = {
     'settings.uninstallerMissing':
       'Kein Deinstallations-Programm gefunden — das gibt es nur in der installierten Fassung, nicht beim Start aus dem Quelltext.',
 
-    'confirm.uninstallGameTitle': '„{title}" deinstallieren?',
+    'confirm.uninstallGameTitle': '„{title}“ deinstallieren?',
     'confirm.uninstallGameText': 'Der Spielordner wird gelöscht. Du kannst das Spiel jederzeit neu installieren.',
     'confirm.uninstallGameOk': 'Deinstallieren',
     'confirm.uninstallLauncherTitle': 'Ember deinstallieren?',
@@ -162,19 +163,37 @@ const STRINGS = {
       'Deine Spiele und Einstellungen bleiben auf der Platte.',
     'confirm.uninstallLauncherOk': 'Beenden und deinstallieren',
 
-    'toast.queued': '„{title}" wurde zur Warteschlange hinzugefügt.',
+    'toast.queued': '„{title}“ wurde zur Warteschlange hinzugefügt.',
     'toast.launching': 'Spiel wird gestartet…',
-    'toast.uninstalled': '„{title}" wurde deinstalliert.',
+    'toast.uninstalled': '„{title}“ wurde deinstalliert.',
     'toast.launchFailed': 'Start fehlgeschlagen: {error}',
-    'toast.badUrl': 'Die URL muss mit http:// oder https:// beginnen.',
     'toast.updateFound': 'Launcher-Update v{version} gefunden.',
     'toast.upToDate': 'Der Launcher ist auf dem neuesten Stand.',
+    'toast.gamesUpToDate': 'Alle Spiele sind auf dem neuesten Stand.',
     'toast.autoUpdates_one': '{n} Update wird geladen.',
     'toast.autoUpdates_other': '{n} Updates werden geladen.',
 
+    'update.available': 'Launcher-Update v{version} steht bereit.',
+    'update.download': 'Herunterladen',
     'update.ready': 'Launcher-Update v{version} ist bereit.',
     'update.downloading': 'Launcher-Update wird geladen… {n} %',
-    'update.restart': 'Neu starten'
+    'update.restart': 'Neu starten',
+
+    'notify.title': 'Ember',
+    'notify.newGame': '„{title}“ ist neu im Store.',
+    'notify.newGames': '{n} neue Spiele im Store.',
+    'notify.gameUpdate': 'Für „{title}“ gibt es ein Update.',
+    'notify.gameUpdates': 'Für {n} Spiele gibt es Updates.',
+    'notify.launcherUpdate': 'Ember v{version} ist da.',
+    'notify.released': '„{title}“ ist jetzt da — du kannst es installieren.',
+    'notify.soonTomorrow': '„{title}“ erscheint morgen.',
+    'notify.soonToday': '„{title}“ erscheint heute.',
+    'notify.background': 'Ember läuft weiter im Hintergrund und sagt Bescheid, wenn es etwas Neues gibt.',
+
+    'tray.tip': 'Ember',
+    'tray.open': 'Ember öffnen',
+    'tray.check': 'Jetzt nach Updates suchen',
+    'tray.quit': 'Ember beenden'
   },
 
   en: {
@@ -233,16 +252,30 @@ const STRINGS = {
 
     'flag.installed': 'Installed',
     'flag.update': 'Update',
+    'flag.soon': 'Coming soon',
+    'flag.soonToday': 'Today',
+    'flag.soonTomorrow': 'Tomorrow',
+    'flag.soonDays': 'In {n} days',
+    'flag.soonHours': 'In {n} h',
 
     'detail.notFound': 'Game not found',
     'detail.localOnly': 'Installed locally',
     'detail.goneFromCatalog': 'This game is no longer part of the catalogue.',
     'detail.install': 'Install',
+    'detail.soon': 'Coming soon',
+    'detail.soonDate': 'Out on {date}',
+    'detail.soonToday': 'Out today',
+    'detail.soonTomorrow': 'Out tomorrow',
+    'detail.soonDays': '{n} days to go',
+    'detail.soonHours': '{n} hours to go',
+    'detail.soonSoon': 'Any minute now',
+    'detail.soonLate': 'The date has passed — it needs a little longer.',
     'detail.update': 'Update',
     'detail.play': 'Play',
     'detail.playAnyway': 'Play anyway',
     'detail.failed': 'Failed',
-    'detail.progress': '{n} % …',
+
+    'detail.progress': '{n}% …',
     'detail.openFolder': 'Open folder',
     'detail.uninstall': 'Uninstall',
     'detail.screenshots': 'Impressions',
@@ -272,24 +305,33 @@ const STRINGS = {
     'settings.title': 'Settings',
     'settings.subtitle': 'Launcher v{version} · {platform}',
     'settings.callout':
-      '<strong>Everything updates itself.</strong> New games appear in the store as soon as they are ' +
-      'published, and the launcher pulls its own updates in the background. There is nothing to set up ' +
-      'here and never anything to download again.',
+      '<strong>Ember checks on its own.</strong> New games appear in the store as soon as they are ' +
+      'published, and the launcher looks for a new version of itself several times a day. You are told ' +
+      'right away; it downloads only when you click — so nobody pulls a hundred megabytes over a ' +
+      'metered connection without asking.',
     'settings.language': 'Language',
     'settings.languageAuto': 'Automatic ({language})',
     'settings.languageHint': 'Applies immediately, no restart needed. Automatic follows your Windows language.',
-    'settings.catalogUrl': 'Catalogue URL (games.json)',
-    'settings.save': 'Save',
-    'settings.catalogHint': 'Already filled in correctly. Clearing the field and saving resets it. Current state: {status}',
-    'settings.installDir': 'Install folder',
-    'settings.change': 'Change',
-    'settings.installDirHint': 'Games that are already installed stay where they are.',
     'settings.autoUpdate': 'Download game updates automatically on start',
     'settings.autoUpdateHint': 'Off means updates are only shown; you start them yourself.',
     'settings.launcher': 'Launcher',
-    'settings.checkUpdate': 'Check for launcher update',
+    'settings.checkUpdate': 'Check for updates now',
+    'settings.checking': 'Checking…',
+    'settings.notices': 'Tell me when there is something new',
+    'settings.noticesHint':
+      'New games in the catalog, updates for installed ones and new versions of Ember. If Ember is in the background, Windows delivers the message.',
+    'settings.autostart': 'Start with Windows',
+    'settings.autostartHint':
+      'Ember starts with the computer and waits in the notification area next to the clock. That is the only way it can tell you about something without you opening it first.',
+    'settings.background': 'Keep running in the background when closed',
+    'settings.backgroundHint':
+      'The window closes, Ember stays in the notification area. „Quit Ember“ in its right-click menu closes it for good.',
     'settings.openData': 'Open data folder',
     'settings.dataDirHint': 'Data folder: {dir}',
+    'settings.changelog': 'What changed recently',
+    'settings.changelogCurrent': 'installed',
+    'settings.changelogOffline': 'The changes cannot be loaded right now — that needs a connection.',
+    'settings.changelogEmpty': 'No version published yet.',
 
     'settings.dangerTitle': 'Remove Ember',
     'settings.uninstallText':
@@ -312,15 +354,33 @@ const STRINGS = {
     'toast.launching': 'Starting game…',
     'toast.uninstalled': '“{title}” was uninstalled.',
     'toast.launchFailed': 'Could not start: {error}',
-    'toast.badUrl': 'The URL has to start with http:// or https://.',
     'toast.updateFound': 'Launcher update v{version} found.',
     'toast.upToDate': 'The launcher is up to date.',
+    'toast.gamesUpToDate': 'All games are up to date.',
     'toast.autoUpdates_one': '{n} update is being downloaded.',
     'toast.autoUpdates_other': '{n} updates are being downloaded.',
 
+    'update.available': 'Launcher update v{version} is available.',
+    'update.download': 'Download',
     'update.ready': 'Launcher update v{version} is ready.',
-    'update.downloading': 'Downloading launcher update… {n} %',
-    'update.restart': 'Restart'
+    'update.downloading': 'Downloading launcher update… {n}%',
+    'update.restart': 'Restart',
+
+    'notify.title': 'Ember',
+    'notify.newGame': '“{title}” is new in the store.',
+    'notify.newGames': '{n} new games in the store.',
+    'notify.gameUpdate': 'There is an update for “{title}”.',
+    'notify.gameUpdates': 'There are updates for {n} games.',
+    'notify.launcherUpdate': 'Ember v{version} is available.',
+    'notify.released': '“{title}” is out — you can install it now.',
+    'notify.soonTomorrow': '“{title}” is out tomorrow.',
+    'notify.soonToday': '“{title}” is out today.',
+    'notify.background': 'Ember keeps running in the background and will tell you when there is something new.',
+
+    'tray.tip': 'Ember',
+    'tray.open': 'Open Ember',
+    'tray.check': 'Check for updates now',
+    'tray.quit': 'Quit Ember'
   }
 };
 
@@ -328,7 +388,6 @@ const FALLBACK = 'en';
 
 let current = 'de';
 
-/** Aus der Windows-Sprache ("de-DE", "en-GB") die passende Übersetzung. */
 function resolveLanguage(setting, systemLocale) {
   if (setting && STRINGS[setting]) return setting;
   const base = String(systemLocale || '').slice(0, 2).toLowerCase();
@@ -348,14 +407,13 @@ function languageInfo(code = current) {
   return LANGUAGES.find((l) => l.code === code) || LANGUAGES[0];
 }
 
-/** Locale für Datums- und Zahlenformate, passend zur gewählten Sprache. */
 function locale() {
   return languageInfo().locale;
 }
 
 function t(key, vars) {
   const n = vars && vars.n;
-  // Ein- und Mehrzahl: t('library.subtitle', { n: 1 }) findet library.subtitle_one.
+
   const candidates =
     typeof n === 'number' ? [`${key}_${n === 1 ? 'one' : 'other'}`, key] : [key];
 
@@ -384,3 +442,6 @@ function t(key, vars) {
 return { LANGUAGES, resolveLanguage, setLanguage, getLanguage, languageInfo, locale, t };
 
 })();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = EMBER_I18N;
+else window.i18n = EMBER_I18N;

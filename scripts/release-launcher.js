@@ -1,18 +1,5 @@
 'use strict';
 
-/*
- * Baut den Installer und veroeffentlicht ihn als GitHub-Release.
- *
- *   npm run release                      baut die Version, die in package.json steht
- *   npm run release -- --version 0.2.0   erhoeht die Version vorher
- *   npm run release -- --notes "Text"    Beschreibung fuer das Release
- *
- * Das Selbstupdate der bereits verteilten Launcher haengt an genau einer Datei:
- * latest.yml. Sie muss mit ins Release, sonst merkt niemand, dass es etwas
- * Neues gibt. Deshalb prueft dieses Skript ihr Vorhandensein, statt sich auf
- * gutes Gedaechtnis zu verlassen.
- */
-
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -48,7 +35,54 @@ function run(command, args, options = {}) {
   return spawnSync(command, args, { cwd: root, shell: true, encoding: 'utf8', ...options });
 }
 
-/* ---------------------------------------------------------------- Ablauf */
+function readFromAsar(asarPath, name) {
+  const buffer = fs.readFileSync(asarPath);
+  const headerSize = buffer.readUInt32LE(4);
+  const jsonSize = buffer.readUInt32LE(12);
+  const header = JSON.parse(buffer.subarray(16, 16 + jsonSize).toString('utf8'));
+
+  const entry = header.files && header.files[name];
+  if (!entry) return null;
+
+  const start = 8 + headerSize + Number(entry.offset);
+  return buffer.subarray(start, start + entry.size).toString('utf8');
+}
+
+function checkPackagedConfig() {
+  const asar = path.join(root, 'dist', 'win-unpacked', 'resources', 'app.asar');
+  if (!fs.existsSync(asar)) {
+    console.log('\n  Hinweis: app.asar nicht gefunden, Pruefung des Pakets uebersprungen.');
+    return;
+  }
+
+  const raw = readFromAsar(asar, 'package.json');
+  if (!raw) fail('Im gepackten app.asar fehlt die package.json.');
+
+  let packed;
+  try {
+    packed = JSON.parse(raw.replace(/^[^{]*/, ''));
+  } catch (err) {
+    fail('Die package.json im app.asar laesst sich nicht lesen: ' + err.message);
+  }
+
+  const needed = [
+    ['ember.catalogUrl', packed.ember && packed.ember.catalogUrl],
+    ['ember.launcherRepo', packed.ember && packed.ember.launcherRepo],
+    ['version', packed.version]
+  ];
+
+  const missing = needed.filter(([, value]) => !value).map(([key]) => key);
+  if (missing.length) {
+    fail(
+      'Im gepackten Launcher fehlen Angaben, die er zur Laufzeit braucht:\n' +
+      '           ' + missing.join(', ') + '\n\n' +
+      '           electron-builder raeumt beim Packen in der package.json auf.\n' +
+      '           Was der Launcher liest, gehoert in den ember-Abschnitt.'
+    );
+  }
+
+  console.log('  Gepacktes Paket geprueft: ' + needed.map(([k]) => k).join(', ') + ' vorhanden.');
+}
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -74,7 +108,16 @@ if (!publish.owner || !publish.repo) {
   fail('In package.json fehlt build.publish (owner und repo).');
 }
 
-/* --- Version --- */
+const runtimeRepo = (pkg.ember && pkg.ember.launcherRepo) || '';
+if (runtimeRepo !== repo) {
+  fail(
+    'package.json widerspricht sich:\n' +
+    '           build.publish      = ' + repo + '\n' +
+    '           ember.launcherRepo = ' + (runtimeRepo || '(fehlt)') + '\n\n' +
+    '           Beide muessen gleich sein. Der Launcher liest die zweite Angabe,\n' +
+    '           weil der build-Abschnitt das Packen nicht ueberlebt.'
+  );
+}
 
 if (typeof args.version === 'string') {
   if (!/^\d+\.\d+\.\d+$/.test(args.version)) {
@@ -93,8 +136,6 @@ const tag = 'v' + version;
 
 console.log('\n  Ember ' + tag + '  ->  https://github.com/' + repo);
 
-/* --- bauen --- */
-
 console.log('\n  Baue den Installer ... das dauert beim ersten Mal ein paar Minuten.\n');
 const build = run('npm', ['run', 'dist'], { stdio: 'inherit', encoding: undefined });
 if (build.status !== 0) fail('Der Build ist fehlgeschlagen. Die Meldung steht oben.');
@@ -112,6 +153,8 @@ if (!fs.existsSync(latest)) {
   );
 }
 
+checkPackagedConfig();
+
 const files = [setup, latest];
 if (fs.existsSync(blockmap)) files.push(blockmap);
 
@@ -124,11 +167,6 @@ const size = (file) => {
 console.log('\n  Fertig gebaut:');
 for (const file of files) console.log('    ' + path.basename(file).padEnd(32) + size(file));
 
-/* --- hochladen --- */
-
-// Der Installer ist nicht signiert - eine Signatur kostet Geld. Windows warnt
-// deshalb beim ersten Start jedes Neuen. Das steht direkt im Release, damit
-// niemand ratlos davorsitzt und abbricht.
 const DEFAULT_NOTES = [
   'Ember ' + tag,
   '',
@@ -142,7 +180,17 @@ const DEFAULT_NOTES = [
   'und neue Spiele erscheinen von allein im Store.'
 ].join('\n');
 
-const notes = typeof args.notes === 'string' ? args.notes : DEFAULT_NOTES;
+let notes = DEFAULT_NOTES;
+if (typeof args['notes-file'] === 'string') {
+  const file = path.resolve(root, args['notes-file']);
+  if (!fs.existsSync(file)) fail('Beschreibungsdatei nicht gefunden: ' + file);
+  notes = fs.readFileSync(file, 'utf8');
+} else if (typeof args.notes === 'string') {
+  if (args.notes.includes('\n')) {
+    fail('Mehrzeilige --notes ueberleben den Weg durch npm nicht. Bitte --notes-file benutzen.');
+  }
+  notes = args.notes;
+}
 const ghReady = run('gh', ['auth', 'status']).status === 0;
 
 if (!ghReady) {
@@ -176,8 +224,7 @@ if (exists) {
   );
   if (upload.status !== 0) fail('Hochladen fehlgeschlagen.');
 } else {
-  // Mehrzeiliger Text ueberlebt den Umweg durch die Eingabeaufforderung nicht,
-  // deshalb geht er als Datei an gh.
+
   const notesFile = path.join(distDir, 'release-notes.txt');
   fs.writeFileSync(notesFile, notes, 'utf8');
 

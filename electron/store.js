@@ -1,8 +1,5 @@
 'use strict';
 
-// Winziger JSON-Store für Einstellungen und Bibliothek.
-// Alles liegt unter %APPDATA%/Ember/ und ist von Hand lesbar.
-
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
@@ -13,8 +10,7 @@ function dataDir() {
 
 function readJson(file, fallback) {
   try {
-    // BOM abschneiden - die Dateien sind lesbar und werden auch mal von Hand
-    // bearbeitet, und Windows-Editoren haengen die Markierung gern vorne dran.
+
     return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
   } catch {
     return fallback;
@@ -28,10 +24,6 @@ function writeJson(file, value) {
   fs.renameSync(tmp, file);
 }
 
-// Wohin der Launcher schaut, wenn niemand etwas umgestellt hat. Der Wert steht
-// in der package.json, damit Launcher und Veroeffentlichungs-Skripte dieselbe
-// Adresse benutzen. Wichtig: Wer den Launcher geschickt bekommt, soll die
-// Spiele sofort sehen - ohne in den Einstellungen irgendetwas einzutragen.
 const DEFAULT_CATALOG_URL =
   (() => {
     try {
@@ -42,13 +34,18 @@ const DEFAULT_CATALOG_URL =
   })();
 
 const DEFAULT_SETTINGS = {
-  // Leer = eingebauter Katalog (siehe oben). "demo" = mitgelieferte Beispiele.
+
   manifestUrl: '',
   installDir: '',
   autoUpdateGames: true,
-  closeToTray: false,
-  // Leer heisst: der Launcher richtet sich nach der Sprache von Windows.
-  // Sonst das Kuerzel einer Sprache aus src/i18n.js, etwa "de" oder "en".
+
+  updateHinweise: true,
+
+  autostart: true,
+  imHintergrund: true,
+
+  gesehenSpiele: [],
+
   language: ''
 };
 
@@ -89,9 +86,7 @@ function getSettings() {
   if (!s.installDir) {
     s.installDir = path.join(dataDir(), 'Games');
   }
-  // Ein leeres Feld heisst "Standard", nicht "kein Katalog". Sonst stuende bei
-  // allen, die den Launcher vor dieser Aenderung installiert haben, weiter die
-  // alte leere Einstellung in der settings.json - und ihr Store bliebe leer.
+
   if (!s.manifestUrl) {
     s.manifestUrl = DEFAULT_CATALOG_URL;
   }
@@ -103,8 +98,6 @@ function setSettings(partial) {
   return getSettings();
 }
 
-// Bibliothek: { [gameId]: { id, version, installPath, executable, installedAt,
-//                           lastPlayed, playtimeSeconds, sizeBytes } }
 function getLibrary() {
   return libraryFile.read().games || {};
 }

@@ -1,14 +1,11 @@
 'use strict';
 
-// Downloads laufen nacheinander ab. Das hält die Bandbreite beisammen und
-// macht den Fortschrittsbalken ehrlich.
-
 const { installGame } = require('./installer');
 
 class DownloadQueue {
   constructor(emit) {
     this.emit = emit;
-    this.items = new Map(); // gameId -> { game, state, percent, ... }
+    this.items = new Map();
     this.order = [];
     this.activeId = null;
     this.controller = null;

@@ -10,10 +10,9 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <!-- Warmer Schein im Hintergrund, rein dekorativ -->
+
     <div class="ambient" aria-hidden="true"></div>
 
-    <!-- Eigene Titelleiste, damit das Fenster wie bei Steam/Epic aussieht -->
     <header class="titlebar">
       <div class="titlebar__drag">
         <div class="brand">
@@ -55,7 +54,7 @@
     </header>
 
     <div class="shell">
-      <!-- Seitenleiste mit der installierten Bibliothek -->
+
       <aside class="sidebar">
         <div class="sidebar__search">
           <svg class="icon" viewBox="0 0 16 16">
@@ -79,7 +78,7 @@
         </div>
 
         <div class="sidebar__footer">
-          <!-- Kein data-i18n: den Text schreibt renderSidebar(), er hängt am Zustand. -->
+
           <div class="sidebar__status" id="catalogStatus">…</div>
           <button class="btn btn--ghost btn--block" id="btnRefresh" data-i18n="sidebar.refresh">
             Katalog aktualisieren
@@ -92,14 +91,13 @@
       </main>
     </div>
 
-    <!-- Banner für Launcher-Updates -->
     <div class="update-bar" id="updateBar" hidden>
       <span class="update-bar__pulse"></span>
       <span id="updateBarText"></span>
-      <button class="btn btn--primary btn--sm" id="updateBarAction" data-i18n="update.restart">Neu starten</button>
+
+      <button class="btn btn--primary btn--sm" id="updateBarAction">Neu starten</button>
     </div>
 
-    <!-- Rückfrage vor allem, was etwas löscht -->
     <div class="modal" id="modal" hidden>
       <div class="modal__backdrop" id="modalBackdrop"></div>
       <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

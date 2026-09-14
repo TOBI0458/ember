@@ -1,28 +1,41 @@
 'use strict';
 
-// Installieren = ZIP laden, prüfen, entpacken, Ordner atomar tauschen.
-// Ein Update ist derselbe Weg mit einer neuen Version.
-
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { spawn } = require('child_process');
 const { shell } = require('electron');
 const extract = require('extract-zip');
 const { downloadFile } = require('./download');
 const { getSettings, getInstalled, setInstalled, removeInstalled } = require('./store');
 
-/** Vergleicht "1.2.10" mit "1.3.0". Gibt -1 / 0 / 1 zurück. */
+const WORK_PREFIX = '.ember-work-';
+
+const STALE_WORK_DAYS = 14;
+
+function splitVersion(value) {
+  const text = String(value == null ? '' : value).trim();
+  const trenner = text.search(/[-+]/);
+  const kern = trenner < 0 ? text : text.slice(0, trenner);
+  const vorab = trenner < 0 || text[trenner] === '+' ? '' : text.slice(trenner + 1).split('+')[0];
+  return {
+    zahlen: kern.split('.').map((n) => parseInt(n, 10) || 0),
+    vorab
+  };
+}
+
 function compareVersions(a, b) {
-  const pa = String(a).split(/[.\-+]/).map((n) => parseInt(n, 10) || 0);
-  const pb = String(b).split(/[.\-+]/).map((n) => parseInt(n, 10) || 0);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i += 1) {
-    const x = pa[i] || 0;
-    const y = pb[i] || 0;
-    if (x !== y) return x < y ? -1 : 1;
+  const va = splitVersion(a);
+  const vb = splitVersion(b);
+
+  for (let i = 0; i < Math.max(va.zahlen.length, vb.zahlen.length); i += 1) {
+    const d = (va.zahlen[i] || 0) - (vb.zahlen[i] || 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
   }
-  return 0;
+
+  if (va.vorab === vb.vorab) return 0;
+  if (!va.vorab) return 1;
+  if (!vb.vorab) return -1;
+  return va.vorab < vb.vorab ? -1 : 1;
 }
 
 function isUpdateAvailable(game, installed) {
@@ -34,7 +47,10 @@ function gameDir(gameId) {
   return path.join(getSettings().installDir, gameId);
 }
 
-/** Entpackte ZIPs haben oft genau einen Wurzelordner - den ziehen wir raus. */
+function workDir(gameId) {
+  return path.join(getSettings().installDir, WORK_PREFIX + gameId);
+}
+
 async function flattenSingleRoot(dir) {
   const entries = await fs.promises.readdir(dir, { withFileTypes: true });
   if (entries.length !== 1 || !entries[0].isDirectory()) return;
@@ -45,26 +61,131 @@ async function flattenSingleRoot(dir) {
   await fs.promises.rename(moved, dir);
 }
 
-/** Sucht die Startdatei, falls das Manifest keine angibt. */
+const HELPER_EXECUTABLES = [
+  /^unitycrashhandler/i,
+  /^unityplayer/i,
+  /^crashpad/i,
+  /^crashreport/i,
+  /^ue[45]?prereqsetup/i,
+  /^vc_?redist/i,
+  /^dxsetup/i,
+  /^dotnetfx/i,
+  /^oalinst/i,
+  /^directx/i,
+  /^unins\d*/i
+];
+
+function isHelper(relativePath) {
+  const name = path.basename(relativePath);
+  return HELPER_EXECUTABLES.some((pattern) => pattern.test(name));
+}
+
 async function findExecutable(dir) {
-  const preferred = process.platform === 'win32' ? ['.exe', '.bat', '.cmd'] : ['.sh', ''];
+  const wanted = process.platform === 'win32' ? ['.exe', '.bat', '.cmd'] : ['.sh'];
   const stack = [dir];
   const found = [];
+
   while (stack.length) {
     const current = stack.pop();
     const entries = await fs.promises.readdir(current, { withFileTypes: true });
+    const names = new Set(entries.map((e) => e.name.toLowerCase()));
+
     for (const entry of entries) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(full);
-      } else if (preferred.some((ext) => ext && entry.name.toLowerCase().endsWith(ext))) {
-        found.push(path.relative(dir, full));
+        continue;
       }
+      const lower = entry.name.toLowerCase();
+      if (!wanted.some((ext) => lower.endsWith(ext))) continue;
+
+      const relative = path.relative(dir, full);
+      const base = entry.name.slice(0, entry.name.length - path.extname(entry.name).length);
+
+      let score = 0;
+      if (names.has(`${base.toLowerCase()}_data`)) score += 100;
+      if (path.dirname(relative) === '.') score += 40;
+      score -= relative.split(path.sep).length;
+      if (lower.endsWith('.exe')) score += 5;
+
+      found.push({ relative, score, helper: isHelper(relative) });
     }
   }
-  // Datei direkt im Wurzelordner schlägt tief verschachtelte.
-  found.sort((a, b) => a.split(path.sep).length - b.split(path.sep).length);
-  return found[0] || null;
+
+  if (!found.length) return null;
+
+  const real = found.filter((item) => !item.helper);
+  const pool = real.length ? real : found;
+  pool.sort((a, b) => b.score - a.score);
+  return pool[0].relative;
+}
+
+async function freeBytes(dir) {
+  try {
+    const stat = await fs.promises.statfs(dir);
+    return Number(stat.bavail) * Number(stat.bsize);
+  } catch {
+    return null;
+  }
+}
+
+function gb(bytes) {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+async function ensureSpace(dir, zipBytes, title) {
+  if (!zipBytes) return;
+  const free = await freeBytes(dir);
+  if (free === null) return;
+
+  const need = Math.round(zipBytes * 2.2) + 200 * 1024 * 1024;
+  if (free >= need) return;
+
+  throw new Error(
+    `Zu wenig Speicherplatz für "${title}": etwa ${gb(need)} nötig, ` +
+      `${gb(free)} frei auf ${path.parse(path.resolve(dir)).root}`
+  );
+}
+
+async function sweepStaleWork(root, keepGameId) {
+  const keep = WORK_PREFIX + keepGameId;
+  const limit = Date.now() - STALE_WORK_DAYS * 24 * 60 * 60 * 1000;
+
+  let entries;
+  try {
+    entries = await fs.promises.readdir(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(WORK_PREFIX)) continue;
+    if (entry.name === keep) continue;
+    const full = path.join(root, entry.name);
+    try {
+      const stat = await fs.promises.stat(full);
+      if (stat.mtimeMs < limit) await fs.promises.rm(full, { recursive: true, force: true });
+    } catch {
+
+    }
+  }
+}
+
+async function swapInPlace(staging, target) {
+  const backup = `${target}.alt`;
+  await fs.promises.rm(backup, { recursive: true, force: true });
+
+  const hadPrevious = fs.existsSync(target);
+  if (hadPrevious) await fs.promises.rename(target, backup);
+
+  try {
+    await fs.promises.rename(staging, target);
+  } catch (err) {
+    if (hadPrevious) await fs.promises.rename(backup, target).catch(() => {});
+    throw err;
+  }
+
+  await fs.promises.rm(backup, { recursive: true, force: true }).catch(() => {});
 }
 
 async function dirSize(dir) {
@@ -82,24 +203,41 @@ async function dirSize(dir) {
   return total;
 }
 
-/**
- * Installiert oder aktualisiert ein Spiel.
- * onStage meldet { stage, percent, received, total, speedBytesPerSecond }.
- */
 async function installGame(game, { onStage, signal } = {}) {
   if (!game.download?.url) {
     throw new Error(`Für "${game.title}" ist keine Download-URL hinterlegt.`);
   }
 
+  const expected = String(game.download.sha256 || '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expected)) {
+    throw new Error(
+      `Für "${game.title}" fehlt eine gültige Prüfsumme im Katalog - Installation abgelehnt.`
+    );
+  }
+
   const report = (stage, extra = {}) => onStage && onStage({ stage, ...extra });
-  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ember-'));
-  const archive = path.join(tempRoot, 'package.zip');
-  const staging = path.join(tempRoot, 'unpacked');
+
+  const target = gameDir(game.id);
+  const root = path.dirname(target);
+  await fs.promises.mkdir(root, { recursive: true });
+
+  await sweepStaleWork(root, game.id);
+  await ensureSpace(root, game.sizeBytes, game.title);
+
+  const work = workDir(game.id);
+  const archive = path.join(work, 'package.zip');
+  const staging = path.join(work, 'unpacked');
+  await fs.promises.mkdir(work, { recursive: true });
+
+  await dropMismatchedPartial(work, archive, game.download.url, expected);
+
+  let keepPartial = false;
 
   try {
     report('downloading', { percent: 0 });
     const result = await downloadFile(game.download.url, archive, {
       signal,
+      resume: true,
       onProgress: ({ received, total, speedBytesPerSecond }) => {
         const known = total || game.sizeBytes || 0;
         report('downloading', {
@@ -111,27 +249,22 @@ async function installGame(game, { onStage, signal } = {}) {
       }
     });
 
-    if (game.download.sha256 && game.download.sha256.toLowerCase() !== result.sha256) {
+    if (expected !== result.sha256) {
+
+      await fs.promises.rm(archive, { force: true }).catch(() => {});
       throw new Error(
         'Prüfsumme stimmt nicht. Die Datei ist beschädigt oder wurde verändert - Installation abgebrochen.'
       );
     }
 
     report('extracting', { percent: 100 });
+    await fs.promises.rm(staging, { recursive: true, force: true });
     await fs.promises.mkdir(staging, { recursive: true });
     await extract(archive, { dir: staging });
     await flattenSingleRoot(staging);
 
     report('installing', { percent: 100 });
-    const target = gameDir(game.id);
-    await fs.promises.mkdir(path.dirname(target), { recursive: true });
-    // Alte Version erst nach erfolgreichem Entpacken entfernen.
-    await fs.promises.rm(target, { recursive: true, force: true });
-    await fs.promises.rename(staging, target).catch(async (err) => {
-      // rename schlägt über Laufwerksgrenzen fehl - dann kopieren.
-      if (err.code !== 'EXDEV') throw err;
-      await fs.promises.cp(staging, target, { recursive: true });
-    });
+    await swapInPlace(staging, target);
 
     const executable = game.executable || (await findExecutable(target));
     const previous = getInstalled(game.id);
@@ -150,9 +283,35 @@ async function installGame(game, { onStage, signal } = {}) {
     setInstalled(game.id, entry);
     report('done', { percent: 100 });
     return entry;
+  } catch (err) {
+
+    keepPartial = err.message !== 'ABORTED' && fs.existsSync(archive);
+    throw err;
   } finally {
-    await fs.promises.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    if (keepPartial) {
+      await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => {});
+    } else {
+      await fs.promises.rm(work, { recursive: true, force: true }).catch(() => {});
+    }
   }
+}
+
+async function dropMismatchedPartial(work, archive, url, sha256) {
+  const stampFile = path.join(work, 'partial.json');
+  const stamp = { url, sha256 };
+
+  let previous = null;
+  try {
+    previous = JSON.parse(await fs.promises.readFile(stampFile, 'utf8'));
+  } catch {
+    previous = null;
+  }
+
+  if (!previous || previous.url !== stamp.url || previous.sha256 !== stamp.sha256) {
+    await fs.promises.rm(archive, { force: true }).catch(() => {});
+  }
+
+  await fs.promises.writeFile(stampFile, JSON.stringify(stamp), 'utf8').catch(() => {});
 }
 
 async function uninstallGame(gameId) {
@@ -160,10 +319,11 @@ async function uninstallGame(gameId) {
   if (entry?.installPath) {
     await fs.promises.rm(entry.installPath, { recursive: true, force: true });
   }
+
+  await fs.promises.rm(workDir(gameId), { recursive: true, force: true }).catch(() => {});
   removeInstalled(gameId);
 }
 
-/** Startet das Spiel losgelöst vom Launcher und misst die Spielzeit. */
 function launchGame(gameId, onExit) {
   const entry = getInstalled(gameId);
   if (!entry) throw new Error('Spiel ist nicht installiert.');
@@ -175,8 +335,7 @@ function launchGame(gameId, onExit) {
   }
 
   const startedAt = Date.now();
-  // Node weigert sich seit 20.12, .bat/.cmd direkt zu starten (CVE-2024-27980).
-  // Für Stapeldateien geht der Weg deshalb über die Eingabeaufforderung.
+
   const ext = path.extname(exe).toLowerCase();
   const useCmd = process.platform === 'win32' && (ext === '.bat' || ext === '.cmd');
   const child = useCmd

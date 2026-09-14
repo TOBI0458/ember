@@ -1,14 +1,5 @@
 'use strict';
 
-/* =========================================================================
-   Oberfläche des Launchers. Reines DOM, kein Framework - der Zustand liegt
-   in `state`, jede Änderung ruft render() auf.
-
-   Sichtbare Texte stehen nicht hier, sondern in i18n.js und kommen über
-   t("schluessel"). Wer eine Sprache umstellt, löst nur ein render() aus -
-   deshalb wechselt die Oberfläche ohne Neustart.
-   ========================================================================= */
-
 const api = window.launcher;
 const { t, locale, languageInfo, resolveLanguage, setLanguage, LANGUAGES } = window.i18n;
 
@@ -22,10 +13,13 @@ const state = {
   settings: {},
   appInfo: {},
   uninstaller: { available: false, path: null },
-  // Als Schlüssel gemerkt statt als fertiger Satz, sonst bliebe die Zeile
-  // nach einem Sprachwechsel in der alten Sprache stehen.
+
   status: { key: 'catalog.loading' },
-  launcherUpdate: null
+  launcherUpdate: null,
+
+  gemeldet: { launcher: null },
+
+  changelog: null
 };
 
 const el = {
@@ -42,8 +36,6 @@ const el = {
   updateBarText: document.getElementById('updateBarText'),
   updateBarAction: document.getElementById('updateBarAction')
 };
-
-/* ------------------------------------------------------------ Hilfsmittel */
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({
@@ -91,7 +83,6 @@ function statusText() {
   return t(state.status.key, state.status.vars);
 }
 
-/** Aus der Spiel-ID abgeleiteter Farbverlauf - Ersatz für fehlende Cover. */
 function hashHue(id) {
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) {
@@ -100,14 +91,20 @@ function hashHue(id) {
   return hash % 360;
 }
 
-function artStyle(game, imageKey = 'cover') {
-  const url = game[imageKey];
-  if (url) return `background-image:url("${escapeHtml(url)}")`;
-  const hue = hashHue(game.id);
+function farbverlauf(id) {
+  const hue = hashHue(id);
   return (
-    `background-image:linear-gradient(150deg,` +
+    `linear-gradient(150deg,` +
     `hsl(${hue} 62% 34%),hsl(${(hue + 48) % 360} 58% 20%) 55%,hsl(${(hue + 92) % 360} 50% 13%))`
   );
+}
+
+function artStyle(game, imageKey = 'cover') {
+  const url = game[imageKey];
+  const verlauf = farbverlauf(game.id);
+
+  if (url) return `background-image:url('${escapeHtml(url)}'),${verlauf}`;
+  return `background-image:${verlauf}`;
 }
 
 function initials(title) {
@@ -119,24 +116,72 @@ function initials(title) {
     .join('');
 }
 
+function splitVersion(value) {
+  const text = String(value == null ? '' : value).trim();
+  const trenner = text.search(/[-+]/);
+  const kern = trenner < 0 ? text : text.slice(0, trenner);
+  const vorab = trenner < 0 || text[trenner] === '+' ? '' : text.slice(trenner + 1).split('+')[0];
+  return {
+    zahlen: kern.split('.').map((n) => parseInt(n, 10) || 0),
+    vorab
+  };
+}
+
 function compareVersions(a, b) {
-  const pa = String(a).split(/[.\-+]/).map((n) => parseInt(n, 10) || 0);
-  const pb = String(b).split(/[.\-+]/).map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-    const x = pa[i] || 0;
-    const y = pb[i] || 0;
-    if (x !== y) return x < y ? -1 : 1;
+  const va = splitVersion(a);
+  const vb = splitVersion(b);
+
+  for (let i = 0; i < Math.max(va.zahlen.length, vb.zahlen.length); i += 1) {
+    const d = (va.zahlen[i] || 0) - (vb.zahlen[i] || 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
   }
-  return 0;
+
+  if (va.vorab === vb.vorab) return 0;
+  if (!va.vorab) return 1;
+  if (!vb.vorab) return -1;
+  return va.vorab < vb.vorab ? -1 : 1;
 }
 
 function statusOf(game) {
   const installed = state.library[game.id];
   const queued = state.queue.find((q) => q.gameId === game.id);
   if (queued) return queued.state === 'error' ? 'error' : 'busy';
+
+  if (!installed && !game.download?.url) return 'soon';
+
   if (!installed) return 'available';
   if (compareVersions(installed.version, game.version) < 0) return 'update';
   return 'installed';
+}
+
+function restzeit(game) {
+  const roh = game && game.releaseAt;
+  if (!roh) return null;
+  const nur = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(roh));
+  const ziel = nur
+    ? new Date(Number(nur[1]), Number(nur[2]) - 1, Number(nur[3]))
+    : new Date(roh);
+  if (Number.isNaN(ziel.getTime())) return null;
+
+  const ms = ziel.getTime() - Date.now();
+
+  const heute = new Date();
+  heute.setHours(0, 0, 0, 0);
+  const tag = new Date(ziel);
+  tag.setHours(0, 0, 0, 0);
+  const tage = Math.round((tag - heute) / 86400000);
+
+  const vorbei = nur ? tage < 0 : ms <= 0;
+
+  return { ziel, ms, tage, vorbei };
+}
+
+function restzeitKurz(r) {
+  if (!r || r.vorbei) return null;
+  if (r.tage >= 2) return t('flag.soonDays', { n: r.tage });
+  if (r.tage === 1) return t('flag.soonTomorrow');
+  if (r.tage === 0) return t('flag.soonToday');
+  return t('flag.soonHours', { n: Math.max(1, Math.ceil(r.ms / 3600000)) });
 }
 
 function toast(message, kind = 'info') {
@@ -150,7 +195,12 @@ function toast(message, kind = 'info') {
   }, kind === 'error' ? 7000 : 4000);
 }
 
-/** Jeder IPC-Aufruf liefert { ok, data|error }; Fehler landen als Toast. */
+function hinweis(text, { titel, kind = 'info' } = {}) {
+  if (state.settings.updateHinweise === false) return;
+  toast(text, kind);
+  api.app.notify(titel || t('notify.title'), text);
+}
+
 async function call(promise, { silent } = {}) {
   const result = await promise;
   if (!result?.ok) {
@@ -175,9 +225,6 @@ function filtered() {
   );
 }
 
-/* ------------------------------------------------------------------ Sprache */
-
-/** Setzt die Sprache und schreibt alle festen Texte im HTML neu. */
 function applyLanguage() {
   const code = resolveLanguage(state.settings.language, state.appInfo.systemLocale);
   setLanguage(code);
@@ -194,9 +241,42 @@ function applyLanguage() {
     node.title = text;
     node.setAttribute('aria-label', text);
   });
+
+  renderUpdateBar();
 }
 
-/* ------------------------------------------------------------- Rückfrage */
+function renderUpdateBar() {
+  const info = state.launcherUpdate;
+  if (!info || info.state === 'error') {
+    el.updateBar.hidden = true;
+    return;
+  }
+
+  el.updateBar.hidden = false;
+
+  if (info.state === 'available') {
+    el.updateBarText.textContent = t('update.available', { version: info.version });
+    el.updateBarAction.textContent = t('update.download');
+    el.updateBarAction.hidden = false;
+    return;
+  }
+
+  if (info.state === 'downloading') {
+    el.updateBarText.textContent = t('update.downloading', { n: info.percent });
+
+    el.updateBarAction.hidden = true;
+    return;
+  }
+
+  if (info.state === 'ready') {
+    el.updateBarText.textContent = t('update.ready', { version: info.version });
+    el.updateBarAction.textContent = t('update.restart');
+    el.updateBarAction.hidden = false;
+    return;
+  }
+
+  el.updateBar.hidden = true;
+}
 
 const modal = {
   root: document.getElementById('modal'),
@@ -208,7 +288,6 @@ const modal = {
   resolve: null
 };
 
-/** Zeigt die Rückfrage und wartet auf die Antwort: true = fortfahren. */
 function confirmAction({ title, text, okLabel }) {
   modal.title.textContent = title;
   modal.text.textContent = text;
@@ -236,27 +315,24 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') closeModal(false);
 });
 
-/* ------------------------------------------------------------- Datenfluss */
+function katalogUebernehmen(data) {
+  state.catalog = data;
+  const count = data.games.length;
+  if (data.source === 'demo') state.status = { key: 'catalog.demo' };
+  else if (data.source === 'cache') state.status = { key: 'catalog.offline' };
+  else if (!count) state.status = { key: 'catalog.empty' };
+  else state.status = { key: 'catalog.count', vars: { n: count } };
+}
 
-async function loadCatalog({ notify } = {}) {
-  const data = await call(api.catalog.fetch(), { silent: true });
+async function loadCatalog({ notify, force } = {}) {
+  const data = await call(api.catalog.fetch(Boolean(force)), { silent: true });
   if (!data) {
     state.status = { key: 'catalog.unreachable' };
     if (notify) toast(t('catalog.failed'), 'error');
     render();
     return;
   }
-  state.catalog = data;
-  const count = data.games.length;
-  if (data.source === 'demo') {
-    state.status = { key: 'catalog.demo' };
-  } else if (data.source === 'cache') {
-    state.status = { key: 'catalog.offline' };
-  } else if (!count) {
-    state.status = { key: 'catalog.empty' };
-  } else {
-    state.status = { key: 'catalog.count', vars: { n: count } };
-  }
+  katalogUebernehmen(data);
   if (notify) toast(t('catalog.refreshed'), 'success');
   render();
 }
@@ -270,8 +346,6 @@ async function loadQueue() {
   state.queue = (await call(api.queue.list(), { silent: true })) || [];
   render();
 }
-
-/* ------------------------------------------------------------- Aktionen */
 
 async function install(game) {
   await call(api.games.install(game));
@@ -313,8 +387,6 @@ async function uninstallLauncher() {
     );
   }
 }
-
-/* --------------------------------------------------------------- Ansichten */
 
 function renderSidebar() {
   const installedGames = Object.values(state.library).sort((a, b) =>
@@ -367,7 +439,11 @@ function cardHtml(game) {
       ? `<span class="card__flag card__flag--update">${t('flag.update')}</span>`
       : status === 'installed'
         ? `<span class="card__flag card__flag--installed">${t('flag.installed')}</span>`
-        : '';
+        : status === 'soon'
+          ? `<span class="card__flag card__flag--soon">${
+              restzeitKurz(restzeit(game)) || t('flag.soon')
+            }</span>`
+          : '';
   return `
     <article class="card" data-open="${escapeHtml(game.id)}">
       <div class="card__art" style="${artStyle(game)}">
@@ -384,7 +460,6 @@ function cardHtml(game) {
     </article>`;
 }
 
-/** Flamme für leere Seiten - dieselbe Form wie in der Titelleiste. */
 const EMPTY_FLAME = `
   <svg class="empty__flame" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M12 2.2c3.4 3.2 5.7 6.2 5.7 9.9a5.7 5.7 0 0 1-11.4 0c0-2.1.9-3.8 2.3-5.3.3 1 .9 1.8 1.7 2.2.6-2.5.3-4.6 1.7-6.8z" />
@@ -404,8 +479,7 @@ function emptyState(title, text) {
 function renderStore() {
   const games = filtered();
   if (!games.length) {
-    // Ein leerer Store ist der Normalfall am Anfang, kein Fehler. Deshalb hier
-    // kein Hinweis auf Einstellungen - da muss niemand etwas reparieren.
+
     if (state.search) {
       return `<div class="page">${emptyState(t('store.noResultsTitle'), t('store.noResultsText'))}</div>`;
     }
@@ -503,8 +577,6 @@ function renderDetail() {
     return `<div class="page">${emptyState(t('detail.notFound'), '')}</div>`;
   }
 
-  // Ist ein installiertes Spiel aus dem Katalog verschwunden, zeigen wir die
-  // lokal gespeicherten Daten - sonst wäre es aus der Bibliothek nicht erreichbar.
   const view = game || {
     id: entry.id,
     title: entry.title,
@@ -538,6 +610,31 @@ function renderDetail() {
     action = `<button class="btn btn--play btn--lg" data-launch="${escapeHtml(view.id)}">${t(
       'detail.play'
     )}</button>`;
+  } else if (status === 'soon') {
+
+    const r = restzeit(view);
+    let zaehler = '';
+    if (r) {
+      const wann = r.vorbei
+        ? t('detail.soonLate')
+        : r.tage >= 2
+          ? t('detail.soonDays', { n: r.tage })
+          : r.tage === 1
+            ? t('detail.soonTomorrow')
+            : r.tage === 0
+              ? t('detail.soonToday')
+              : r.ms > 3600000
+                ? t('detail.soonHours', { n: Math.ceil(r.ms / 3600000) })
+                : t('detail.soonSoon');
+      const datum = r.ziel.toLocaleDateString(locale(), {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+      zaehler = `<div class="countdown">
+        <span class="countdown__big">${escapeHtml(wann)}</span>
+        <span class="countdown__date">${escapeHtml(t('detail.soonDate', { date: datum }))}</span>
+      </div>`;
+    }
+    action = `<button class="btn btn--lg" disabled>${t('detail.soon')}</button>${zaehler}`;
   } else {
     action = `<button class="btn btn--primary btn--lg" data-install="${escapeHtml(view.id)}">${t(
       'detail.install'
@@ -700,6 +797,78 @@ function renderDownloads() {
     </div>`;
 }
 
+function notesToHtml(notes) {
+  const out = [];
+  let list = null;
+  let paragraph = [];
+
+  const closeList = () => {
+    if (!list) return;
+    out.push(`<ul>${list.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`);
+    list = null;
+  };
+  const closeParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(`<p>${paragraph.map(escapeHtml).join('<br>')}</p>`);
+    paragraph = [];
+  };
+
+  for (const raw of String(notes).split('\n')) {
+    const line = raw.trim();
+
+    if (!line) {
+      closeList();
+      closeParagraph();
+      continue;
+    }
+
+    const bullet = /^[-*•]\s+(.*)$/.exec(line);
+    if (bullet) {
+      closeParagraph();
+      if (!list) list = [];
+      list.push(bullet[1]);
+      continue;
+    }
+
+    if (list && /^\s/.test(raw)) {
+      list[list.length - 1] += ' ' + line;
+      continue;
+    }
+
+    closeList();
+    paragraph.push(line);
+  }
+
+  closeList();
+  closeParagraph();
+  return out.join('');
+}
+
+function changelogHtml() {
+  if (state.changelog === null) return `<div class="hint">${t('common.loading')}</div>`;
+  if (state.changelog === 'error') return `<div class="hint">${t('settings.changelogOffline')}</div>`;
+  if (!state.changelog.length) return `<div class="hint">${t('settings.changelogEmpty')}</div>`;
+
+  return state.changelog
+    .map((entry) => {
+      const date = entry.date ? new Date(entry.date).toLocaleDateString(locale()) : '';
+      const isCurrent = entry.version === state.appInfo.version;
+
+      const body = notesToHtml(entry.notes);
+
+      return `
+        <div class="changelog__entry">
+          <div class="changelog__head">
+            <span class="changelog__version">v${escapeHtml(entry.version)}</span>
+            ${isCurrent ? `<span class="changelog__now">${t('settings.changelogCurrent')}</span>` : ''}
+            <span class="changelog__date">${escapeHtml(date)}</span>
+          </div>
+          <div class="changelog__body">${body}</div>
+        </div>`;
+    })
+    .join('');
+}
+
 function renderSettings() {
   const s = state.settings;
   const autoCode = resolveLanguage('', state.appInfo.systemLocale);
@@ -744,31 +913,35 @@ function renderSettings() {
       </div>
 
       <div class="form-row">
-        <label for="manifestUrl">${t('settings.catalogUrl')}</label>
-        <div class="input-group">
-          <input class="input" id="manifestUrl" type="text" spellcheck="false"
-                 placeholder="https://raw.githubusercontent.com/DEIN-NAME/REPO/main/games.json"
-                 value="${escapeHtml(s.manifestUrl || '')}" />
-          <button class="btn" id="btnSaveManifest">${t('settings.save')}</button>
-        </div>
-        <div class="hint">${escapeHtml(t('settings.catalogHint', { status: statusText() }))}</div>
-      </div>
-
-      <div class="form-row">
-        <label>${t('settings.installDir')}</label>
-        <div class="input-group">
-          <input class="input" id="installDir" type="text" readonly value="${escapeHtml(s.installDir || '')}" />
-          <button class="btn" id="btnPickDir">${t('settings.change')}</button>
-        </div>
-        <div class="hint">${t('settings.installDirHint')}</div>
-      </div>
-
-      <div class="form-row">
         <label class="switch">
           <input type="checkbox" id="autoUpdateGames" ${s.autoUpdateGames ? 'checked' : ''} />
           <span>${t('settings.autoUpdate')}</span>
         </label>
         <div class="hint">${t('settings.autoUpdateHint')}</div>
+      </div>
+
+      <div class="form-row">
+        <label class="switch">
+          <input type="checkbox" id="updateHinweise" ${s.updateHinweise !== false ? 'checked' : ''} />
+          <span>${t('settings.notices')}</span>
+        </label>
+        <div class="hint">${t('settings.noticesHint')}</div>
+      </div>
+
+      <div class="form-row">
+        <label class="switch">
+          <input type="checkbox" id="autostart" ${s.autostart !== false ? 'checked' : ''} />
+          <span>${t('settings.autostart')}</span>
+        </label>
+        <div class="hint">${t('settings.autostartHint')}</div>
+      </div>
+
+      <div class="form-row">
+        <label class="switch">
+          <input type="checkbox" id="imHintergrund" ${s.imHintergrund !== false ? 'checked' : ''} />
+          <span>${t('settings.background')}</span>
+        </label>
+        <div class="hint">${t('settings.backgroundHint')}</div>
       </div>
 
       <h2 class="section-title">${t('settings.launcher')}</h2>
@@ -778,6 +951,11 @@ function renderSettings() {
           <button class="btn btn--ghost" id="btnOpenData">${t('settings.openData')}</button>
         </div>
         <div class="hint">${escapeHtml(t('settings.dataDirHint', { dir: state.appInfo.dataDir || '' }))}</div>
+      </div>
+
+      <div class="form-row">
+        <label>${t('settings.changelog')}</label>
+        <div class="changelog" id="changelog">${changelogHtml()}</div>
       </div>
 
       <h2 class="section-title section-title--danger">${t('settings.dangerTitle')}</h2>
@@ -804,7 +982,25 @@ function render() {
   };
   el.content.innerHTML = (views[state.view] || renderStore)();
 
-  if (state.view === 'settings') wireSettings();
+  if (state.view === 'settings') {
+    wireSettings();
+    loadChangelog();
+  }
+}
+
+let changelogPending = false;
+async function loadChangelog() {
+  if (changelogPending) return;
+  if (state.changelog !== null && state.changelog !== 'error') return;
+
+  changelogPending = true;
+  const entries = await call(api.app.changelog(), { silent: true });
+  changelogPending = false;
+
+  state.changelog = entries || 'error';
+
+  const box = document.getElementById('changelog');
+  if (box) box.innerHTML = changelogHtml();
 }
 
 function navigate(view, gameId = null) {
@@ -814,8 +1010,6 @@ function navigate(view, gameId = null) {
   render();
 }
 
-/* ---------------------------------------------------------- Ereignisse */
-
 function wireSettings() {
   document.getElementById('langSelect').addEventListener('change', async (event) => {
     state.settings = (await call(api.settings.set({ language: event.target.value }))) || state.settings;
@@ -823,34 +1017,44 @@ function wireSettings() {
     render();
   });
 
-  document.getElementById('btnSaveManifest').addEventListener('click', async () => {
-    const url = document.getElementById('manifestUrl').value.trim();
-    if (url && !/^https?:\/\//.test(url)) {
-      toast(t('toast.badUrl'), 'error');
-      return;
-    }
-    state.settings = (await call(api.settings.set({ manifestUrl: url }))) || state.settings;
-    await loadCatalog({ notify: true });
-  });
-
-  document.getElementById('btnPickDir').addEventListener('click', async () => {
-    const updated = await call(api.settings.pickInstallDir());
-    if (updated) {
-      state.settings = updated;
-      render();
-    }
-  });
-
   document.getElementById('autoUpdateGames').addEventListener('change', async (event) => {
     state.settings = (await call(api.settings.set({ autoUpdateGames: event.target.checked }))) || state.settings;
   });
 
-  document.getElementById('btnCheckLauncher').addEventListener('click', async () => {
-    const result = await call(api.app.checkForUpdates());
-    if (!result) return;
-    if (result.note) toast(result.note);
-    else if (result.available) toast(t('toast.updateFound', { version: result.version }), 'success');
-    else toast(t('toast.upToDate'), 'success');
+  document.getElementById('updateHinweise').addEventListener('change', async (event) => {
+    state.settings = (await call(api.settings.set({ updateHinweise: event.target.checked }))) || state.settings;
+  });
+
+  document.getElementById('autostart').addEventListener('change', async (event) => {
+    state.settings =
+      (await call(api.settings.set({ autostart: event.target.checked }))) || state.settings;
+  });
+
+  document.getElementById('imHintergrund').addEventListener('change', async (event) => {
+    state.settings =
+      (await call(api.settings.set({ imHintergrund: event.target.checked }))) || state.settings;
+  });
+
+  document.getElementById('btnCheckLauncher').addEventListener('click', async (event) => {
+    const knopf = event.currentTarget;
+    knopf.disabled = true;
+    knopf.textContent = t('settings.checking');
+    try {
+
+      const vorher = state.catalog.games.filter((g) => statusOf(g) === 'update').length;
+      await loadCatalog({ force: true });
+      const offen = state.catalog.games.filter((g) => statusOf(g) === 'update').length;
+      if (!offen && !vorher) toast(t('toast.gamesUpToDate'), 'success');
+
+      const result = await call(api.app.checkForUpdates());
+      if (!result) return;
+      if (result.note) toast(result.note);
+      else if (result.available) toast(t('toast.updateFound', { version: result.version }), 'success');
+      else toast(t('toast.upToDate'), 'success');
+    } finally {
+      knopf.disabled = false;
+      knopf.textContent = t('settings.checkUpdate');
+    }
   });
 
   document.getElementById('btnOpenData').addEventListener('click', () => {
@@ -915,12 +1119,23 @@ el.search.addEventListener('input', (event) => {
   render();
 });
 
-document.getElementById('btnRefresh').addEventListener('click', () => loadCatalog({ notify: true }));
+document.getElementById('btnRefresh').addEventListener('click', () =>
+  loadCatalog({ notify: true, force: true })
+);
+
+api.catalog.onChanged((data) => {
+  if (!data) return;
+  katalogUebernehmen(data);
+  render();
+});
+
+api.app.onWache((m) => {
+  if (!m || state.settings.updateHinweise === false) return;
+  toast(t(m.key, m.vars), m.kind || 'info');
+});
 document.getElementById('btnMinimize').addEventListener('click', () => api.window.minimize());
 document.getElementById('btnMaximize').addEventListener('click', () => api.window.toggleMaximize());
 document.getElementById('btnClose').addEventListener('click', () => api.window.close());
-
-/* ------------------------------------------------------ Push aus dem Main */
 
 api.queue.onChanged((queue) => {
   state.queue = queue;
@@ -937,51 +1152,39 @@ api.games.onExited((info) => {
 
 api.app.onLauncherUpdate((info) => {
   state.launcherUpdate = info;
-  if (info.state === 'ready') {
-    el.updateBar.hidden = false;
-    el.updateBarText.textContent = t('update.ready', { version: info.version });
-  } else if (info.state === 'downloading') {
-    el.updateBar.hidden = false;
-    el.updateBarText.textContent = t('update.downloading', { n: info.percent });
+  renderUpdateBar();
+
+  if (info.state === 'available' && state.gemeldet.launcher !== info.version) {
+    state.gemeldet.launcher = info.version;
+    hinweis(t('notify.launcherUpdate', { version: info.version }), { kind: 'success' });
   }
 });
 
-el.updateBarAction.addEventListener('click', () => api.app.installLauncherUpdate());
-
-/* ------------------------------------------------------------------ Start */
-
-// Automatische Spiel-Updates: still im Hintergrund einreihen. Die Warteschlange
-// kennt jede Kennung nur einmal, doppeltes Einreihen kann also nichts anrichten.
-async function queuePendingUpdates() {
-  if (!state.settings.autoUpdateGames) return;
-  const pending = state.catalog.games.filter((g) => statusOf(g) === 'update');
-  for (const game of pending) {
-    await call(api.games.install(game), { silent: true });
-  }
-  if (pending.length) {
-    toast(t('toast.autoUpdates', { n: pending.length }), 'success');
-  }
-}
+el.updateBarAction.addEventListener('click', () => {
+  if (state.launcherUpdate?.state === 'available') api.app.downloadLauncherUpdate();
+  else api.app.installLauncherUpdate();
+});
 
 async function boot() {
   state.settings = (await call(api.settings.get(), { silent: true })) || {};
   state.appInfo = (await call(api.app.info(), { silent: true })) || {};
   state.uninstaller = (await call(api.app.uninstallerInfo(), { silent: true })) || state.uninstaller;
 
-  // Vor dem ersten render(), sonst blitzt kurz die falsche Sprache auf.
   applyLanguage();
+
+  const stand = await call(api.app.launcherUpdateState(), { silent: true });
+  if (stand && !state.launcherUpdate) {
+    state.launcherUpdate = stand;
+    renderUpdateBar();
+    if (stand.state === 'available' && state.gemeldet.launcher !== stand.version) {
+      state.gemeldet.launcher = stand.version;
+      hinweis(t('notify.launcherUpdate', { version: stand.version }), { kind: 'success' });
+    }
+  }
 
   await loadLibrary();
   await loadQueue();
   await loadCatalog();
-  await queuePendingUpdates();
-
-  // Wer den Launcher offen liegen laesst, soll ein neues Spiel trotzdem sehen,
-  // ohne ihn neu zu starten. Alle fuenfzehn Minuten ein Blick genuegt dafuer.
-  setInterval(async () => {
-    await loadCatalog();
-    await queuePendingUpdates();
-  }, 15 * 60 * 1000);
 }
 
 boot();
