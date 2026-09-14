@@ -1,6 +1,6 @@
 {
   "name": "ember",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Ember - ein Spiele-Launcher im Steam/Epic-Stil mit automatischen Updates ueber GitHub Releases",
   "main": "electron/main.js",
   "author": "Tobias",

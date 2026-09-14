@@ -122,6 +122,20 @@ function beenden() {
   app.quit();
 }
 
+function alteAutostartEintraegeEntfernen() {
+  if (process.platform !== 'win32') return;
+  const jetzt = anwendungsKennung();
+  const alt = ['electron.app.Ember', 'Ember'].filter((n) => n !== jetzt);
+  for (const name of alt) {
+    try {
+      require('child_process').execFileSync('reg', [
+        'delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+        '/v', name, '/f'
+      ], { stdio: 'ignore' });
+    } catch {}
+  }
+}
+
 function autostartSetzen(an) {
   if (process.platform === 'darwin' || process.platform === 'win32') {
     app.setLoginItemSettings({
@@ -143,6 +157,7 @@ function autostartAbgleichen() {
     ist = !gewollt;
   }
   if (ist !== gewollt) autostartSetzen(gewollt);
+  alteAutostartEintraegeEntfernen();
 }
 
 function showTaskbarProgress(queueSnapshot) {
