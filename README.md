@@ -249,8 +249,8 @@ Gemessen auf einem Rechner mit 16 Kernen:
 
 | | Prozesse | Speicher | Rechenzeit im Leerlauf |
 | --- | --- | --- | --- |
-| Fenster offen | 4 | ~390 MB | — |
-| `--hintergrund` | 3 | ~160 MB | 0,00 s in 45 s |
+| Fenster offen | 4 | ~385 MB | — |
+| `--hintergrund` | 3 | ~175 MB | 0,016 s in 60 s |
 
 Der Unterschied ist der Renderer: Wo kein Fenster ist, gibt es keinen. Dazu
 schaltet Ember im Hintergrundstart die Grafikbeschleunigung ab
