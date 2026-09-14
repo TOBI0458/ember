@@ -1,6 +1,6 @@
 {
   "name": "ember",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Ember - ein Spiele-Launcher im Steam/Epic-Stil mit automatischen Updates ueber GitHub Releases",
   "main": "electron/main.js",
   "author": "Tobias",
@@ -19,7 +19,8 @@
   "ember": {
     "catalogUrl": "https://raw.githubusercontent.com/TOBI0458/launcher-katalog/main/games.json",
     "gamesRepo": "launcher-katalog",
-    "launcherRepo": "TOBI0458/ember"
+    "launcherRepo": "TOBI0458/ember",
+    "appId": "com.tobias.ember"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",

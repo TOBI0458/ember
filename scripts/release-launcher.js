@@ -68,6 +68,7 @@ function checkPackagedConfig() {
   const needed = [
     ['ember.catalogUrl', packed.ember && packed.ember.catalogUrl],
     ['ember.launcherRepo', packed.ember && packed.ember.launcherRepo],
+    ['ember.appId', packed.ember && packed.ember.appId],
     ['version', packed.version]
   ];
 

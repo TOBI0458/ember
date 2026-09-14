@@ -78,6 +78,11 @@ function fensterZeigen() {
   mainWindow.focus();
 }
 
+function anwendungsKennung() {
+  const p = require('../package.json');
+  return (p.ember && p.ember.appId) || (p.build && p.build.appId) || 'com.tobias.ember';
+}
+
 function symbolDatei() {
   return path.join(app.getAppPath(), 'build', 'icon.png');
 }
@@ -420,11 +425,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
 
-    try {
-      app.setAppUserModelId(require('../package.json').build.appId);
-    } catch {
-
-    }
+    app.setAppUserModelId(anwendungsKennung());
 
     Menu.setApplicationMenu(isDev ? Menu.getApplicationMenu() : null);
     queue = new DownloadQueue(emit);
